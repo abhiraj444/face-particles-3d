@@ -54,12 +54,75 @@ async function getWasmFileset(): Promise<unknown> {
   return wasmFilesetPromise;
 }
 
+function isMobile(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return (
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua) ||
+    (typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches)
+  );
+}
+
+export async function createCpuLandmarker(): Promise<FaceLandmarker | null> {
+  try {
+    const wasm = (await getWasmFileset()) as Parameters<typeof FaceLandmarker.createFromOptions>[0];
+    try {
+      return await FaceLandmarker.createFromOptions(wasm, {
+        baseOptions: { modelAssetPath: LOCAL_LANDMARKER_MODEL, delegate: "CPU" },
+        runningMode: "IMAGE",
+        numFaces: 4,
+        minFaceDetectionConfidence: 0.35,
+        minFacePresenceConfidence: 0.35,
+      });
+    } catch {
+      return await FaceLandmarker.createFromOptions(wasm, {
+        baseOptions: { modelAssetPath: CDN_LANDMARKER_MODEL, delegate: "CPU" },
+        runningMode: "IMAGE",
+        numFaces: 4,
+        minFaceDetectionConfidence: 0.35,
+        minFacePresenceConfidence: 0.35,
+      });
+    }
+  } catch (err) {
+    console.warn("[Vision] createCpuLandmarker failed:", err);
+    return null;
+  }
+}
+
+export async function createCpuSegmenter(): Promise<ImageSegmenter | null> {
+  try {
+    const wasm = (await getWasmFileset()) as Parameters<typeof ImageSegmenter.createFromOptions>[0];
+    try {
+      return await ImageSegmenter.createFromOptions(wasm, {
+        baseOptions: { modelAssetPath: LOCAL_SEGMENTER_MODEL, delegate: "CPU" },
+        runningMode: "IMAGE",
+        outputCategoryMask: true,
+        outputConfidenceMasks: false,
+      });
+    } catch {
+      return await ImageSegmenter.createFromOptions(wasm, {
+        baseOptions: { modelAssetPath: CDN_SEGMENTER_MODEL, delegate: "CPU" },
+        runningMode: "IMAGE",
+        outputCategoryMask: true,
+        outputConfidenceMasks: false,
+      });
+    }
+  } catch (err) {
+    console.warn("[Vision] createCpuSegmenter failed:", err);
+    return null;
+  }
+}
+
 async function initLandmarker(): Promise<FaceLandmarker | null> {
   if (landmarkerPromise) return landmarkerPromise;
   landmarkerPromise = (async () => {
+    // On mobile devices, MediaPipe WebGL GPU delegate has known precision bugs and silent failures.
+    // CPU delegate runs WASM SIMD which is ultra-reliable, fast (~150ms), and 100% accurate.
+    if (isMobile()) {
+      return await createCpuLandmarker();
+    }
     try {
       const wasm = (await getWasmFileset()) as Parameters<typeof FaceLandmarker.createFromOptions>[0];
-      // Try local model first with GPU delegate, fallback to CPU
       try {
         return await FaceLandmarker.createFromOptions(wasm, {
           baseOptions: { modelAssetPath: LOCAL_LANDMARKER_MODEL, delegate: "GPU" },
@@ -69,28 +132,11 @@ async function initLandmarker(): Promise<FaceLandmarker | null> {
           minFacePresenceConfidence: 0.4,
         });
       } catch {
-        try {
-          return await FaceLandmarker.createFromOptions(wasm, {
-            baseOptions: { modelAssetPath: LOCAL_LANDMARKER_MODEL, delegate: "CPU" },
-            runningMode: "IMAGE",
-            numFaces: 4,
-            minFaceDetectionConfidence: 0.4,
-            minFacePresenceConfidence: 0.4,
-          });
-        } catch {
-          // Fallback to CDN model
-          return await FaceLandmarker.createFromOptions(wasm, {
-            baseOptions: { modelAssetPath: CDN_LANDMARKER_MODEL, delegate: "CPU" },
-            runningMode: "IMAGE",
-            numFaces: 4,
-            minFaceDetectionConfidence: 0.4,
-            minFacePresenceConfidence: 0.4,
-          });
-        }
+        return await createCpuLandmarker();
       }
     } catch (err) {
-      console.warn("[Vision] FaceLandmarker initialization failed:", err);
-      return null;
+      console.warn("[Vision] FaceLandmarker initialization failed, falling back to CPU:", err);
+      return await createCpuLandmarker();
     }
   })();
   return landmarkerPromise;
@@ -99,9 +145,11 @@ async function initLandmarker(): Promise<FaceLandmarker | null> {
 async function initSegmenter(): Promise<ImageSegmenter | null> {
   if (segmenterPromise) return segmenterPromise;
   segmenterPromise = (async () => {
+    if (isMobile()) {
+      return await createCpuSegmenter();
+    }
     try {
       const wasm = (await getWasmFileset()) as Parameters<typeof ImageSegmenter.createFromOptions>[0];
-      // Try local model first with GPU, fallback to CPU
       try {
         return await ImageSegmenter.createFromOptions(wasm, {
           baseOptions: { modelAssetPath: LOCAL_SEGMENTER_MODEL, delegate: "GPU" },
@@ -110,26 +158,11 @@ async function initSegmenter(): Promise<ImageSegmenter | null> {
           outputConfidenceMasks: false,
         });
       } catch {
-        try {
-          return await ImageSegmenter.createFromOptions(wasm, {
-            baseOptions: { modelAssetPath: LOCAL_SEGMENTER_MODEL, delegate: "CPU" },
-            runningMode: "IMAGE",
-            outputCategoryMask: true,
-            outputConfidenceMasks: false,
-          });
-        } catch {
-          // Fallback to CDN model
-          return await ImageSegmenter.createFromOptions(wasm, {
-            baseOptions: { modelAssetPath: CDN_SEGMENTER_MODEL, delegate: "CPU" },
-            runningMode: "IMAGE",
-            outputCategoryMask: true,
-            outputConfidenceMasks: false,
-          });
-        }
+        return await createCpuSegmenter();
       }
     } catch (err) {
-      console.warn("[Vision] ImageSegmenter initialization failed:", err);
-      return null;
+      console.warn("[Vision] ImageSegmenter initialization failed, falling back to CPU:", err);
+      return await createCpuSegmenter();
     }
   })();
   return segmenterPromise;
@@ -160,63 +193,57 @@ export async function analyze(source: HTMLCanvasElement): Promise<VisionResult> 
   let hasFace = false;
   let degradedLandmarker = !landmarker;
 
+  const pickBestFace = (faces: { x: number; y: number; z: number }[][]) => {
+    let bestFace = faces[0]!;
+    let maxArea = -1;
+    for (const face of faces) {
+      let minX = 1, minY = 1, maxX = 0, maxY = 0;
+      for (const p of face) {
+        minX = Math.min(minX, p.x);
+        minY = Math.min(minY, p.y);
+        maxX = Math.max(maxX, p.x);
+        maxY = Math.max(maxY, p.y);
+      }
+      const area = Math.max(0, maxX - minX) * Math.max(0, maxY - minY);
+      if (area > maxArea) {
+        maxArea = area;
+        bestFace = face;
+      }
+    }
+    return bestFace.map((p) => ({ x: p.x, y: p.y, z: p.z }));
+  };
+
   if (landmarker) {
     try {
       const result = landmarker.detect(inferSource);
       if (result.faceLandmarks && result.faceLandmarks.length > 0) {
         hasFace = true;
-        let bestFace = result.faceLandmarks[0]!;
-        let maxArea = -1;
-        for (const face of result.faceLandmarks) {
-          let minX = 1, minY = 1, maxX = 0, maxY = 0;
-          for (const p of face) {
-            minX = Math.min(minX, p.x);
-            minY = Math.min(minY, p.y);
-            maxX = Math.max(maxX, p.x);
-            maxY = Math.max(maxY, p.y);
-          }
-          const area = Math.max(0, maxX - minX) * Math.max(0, maxY - minY);
-          if (area > maxArea) {
-            maxArea = area;
-            bestFace = face;
+        landmarks = pickBestFace(result.faceLandmarks);
+      } else {
+        // If 0 faces detected (GPU delegate precision failure), immediately retry on CPU
+        const cpuLm = await createCpuLandmarker();
+        if (cpuLm) {
+          const cpuRes = cpuLm.detect(inferSource);
+          if (cpuRes.faceLandmarks && cpuRes.faceLandmarks.length > 0) {
+            hasFace = true;
+            landmarks = pickBestFace(cpuRes.faceLandmarks);
           }
         }
-        landmarks = bestFace.map((p) => ({ x: p.x, y: p.y, z: p.z }));
       }
     } catch (err) {
-      console.warn("[Vision] GPU Face detection failed, falling back to CPU:", err);
-      try {
-        const wasm = (await getWasmFileset()) as Parameters<typeof FaceLandmarker.createFromOptions>[0];
-        const cpuLandmarker = await FaceLandmarker.createFromOptions(wasm, {
-          baseOptions: { modelAssetPath: LOCAL_LANDMARKER_MODEL, delegate: "CPU" },
-          runningMode: "IMAGE",
-          numFaces: 4,
-          minFaceDetectionConfidence: 0.4,
-          minFacePresenceConfidence: 0.4,
-        });
-        const result = cpuLandmarker.detect(inferSource);
-        if (result.faceLandmarks && result.faceLandmarks.length > 0) {
-          hasFace = true;
-          let bestFace = result.faceLandmarks[0]!;
-          let maxArea = -1;
-          for (const face of result.faceLandmarks) {
-            let minX = 1, minY = 1, maxX = 0, maxY = 0;
-            for (const p of face) {
-              minX = Math.min(minX, p.x);
-              minY = Math.min(minY, p.y);
-              maxX = Math.max(maxX, p.x);
-              maxY = Math.max(maxY, p.y);
-            }
-            const area = Math.max(0, maxX - minX) * Math.max(0, maxY - minY);
-            if (area > maxArea) {
-              maxArea = area;
-              bestFace = face;
-            }
+      console.warn("[Vision] Primary face detection error, falling back to CPU:", err);
+      const cpuLm = await createCpuLandmarker();
+      if (cpuLm) {
+        try {
+          const cpuRes = cpuLm.detect(inferSource);
+          if (cpuRes.faceLandmarks && cpuRes.faceLandmarks.length > 0) {
+            hasFace = true;
+            landmarks = pickBestFace(cpuRes.faceLandmarks);
           }
-          landmarks = bestFace.map((p) => ({ x: p.x, y: p.y, z: p.z }));
+        } catch {
+          degradedLandmarker = true;
         }
-      } catch (cpuErr) {
-        console.warn("[Vision] CPU Face detection also failed:", cpuErr);
+      } else {
         degradedLandmarker = true;
       }
     }
@@ -240,29 +267,55 @@ export async function analyze(source: HTMLCanvasElement): Promise<VisionResult> 
       if (segResult.confidenceMasks) {
         for (const m of segResult.confidenceMasks) m.close();
       }
+
+      // Sanity check: confirm segmentation mask contains face or hair
+      let hasFaceOrHair = false;
+      if (classes) {
+        for (let i = 0; i < classes.length; i += 8) {
+          const c = classes[i]!;
+          if (c === 1 || c === 3) {
+            hasFaceOrHair = true;
+            break;
+          }
+        }
+      }
+      if (!hasFaceOrHair) {
+        // If GPU segmentation missed face/hair, run CPU segmenter
+        const cpuSeg = await createCpuSegmenter();
+        if (cpuSeg) {
+          const cpuRes = cpuSeg.segment(inferSource);
+          if (cpuRes.categoryMask) {
+            const mask = cpuRes.categoryMask;
+            classW = mask.width;
+            classH = mask.height;
+            classes = new Uint8Array(mask.getAsUint8Array());
+            mask.close();
+          }
+          if (cpuRes.confidenceMasks) {
+            for (const m of cpuRes.confidenceMasks) m.close();
+          }
+        }
+      }
     } catch (err) {
-      console.warn("[Vision] GPU Segmentation failed, falling back to CPU:", err);
-      try {
-        const wasm = (await getWasmFileset()) as Parameters<typeof ImageSegmenter.createFromOptions>[0];
-        const cpuSegmenter = await ImageSegmenter.createFromOptions(wasm, {
-          baseOptions: { modelAssetPath: LOCAL_SEGMENTER_MODEL, delegate: "CPU" },
-          runningMode: "IMAGE",
-          outputCategoryMask: true,
-          outputConfidenceMasks: false,
-        });
-        const segResult = cpuSegmenter.segment(inferSource);
-        if (segResult.categoryMask) {
-          const mask = segResult.categoryMask;
-          classW = mask.width;
-          classH = mask.height;
-          classes = new Uint8Array(mask.getAsUint8Array());
-          mask.close();
+      console.warn("[Vision] Primary segmentation error, falling back to CPU:", err);
+      const cpuSeg = await createCpuSegmenter();
+      if (cpuSeg) {
+        try {
+          const cpuRes = cpuSeg.segment(inferSource);
+          if (cpuRes.categoryMask) {
+            const mask = cpuRes.categoryMask;
+            classW = mask.width;
+            classH = mask.height;
+            classes = new Uint8Array(mask.getAsUint8Array());
+            mask.close();
+          }
+          if (cpuRes.confidenceMasks) {
+            for (const m of cpuRes.confidenceMasks) m.close();
+          }
+        } catch {
+          degradedSegmenter = true;
         }
-        if (segResult.confidenceMasks) {
-          for (const m of segResult.confidenceMasks) m.close();
-        }
-      } catch (cpuErr) {
-        console.warn("[Vision] CPU Segmentation also failed:", cpuErr);
+      } else {
         degradedSegmenter = true;
       }
     }

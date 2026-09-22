@@ -32,12 +32,12 @@ function headBounds(vision: VisionResult, srcW: number, srcH: number, chinLimitY
     for (let y = 0; y < classH; y++) {
       for (let x = 0; x < classW; x++) {
         const c = classes[y * classW + x] ?? 0;
-        // Include hair, face, accessories/glasses (class 5), and headwear/hat (class 4 above chin)
+        // Include hair, face, accessories/glasses (class 5), and headwear/hat (class 4 above face center)
         const isHeadElement =
           c === CLASS_HAIR ||
           c === CLASS_FACE ||
           c === CLASS_OTHERS ||
-          (c === CLASS_CLOTHES && y <= maxNeckY * 0.75);
+          (c === CLASS_CLOTHES && y <= maxNeckY * 0.45);
         const isNeckSlice = c === CLASS_BODY && y <= maxNeckY;
         if (isHeadElement || isNeckSlice) {
           const px = (x / classW) * srcW;
@@ -158,9 +158,34 @@ export function headCrop(
   };
 
   let chinCropY = outH * 0.72;
-  if (lm && lm[IDX.chin]) {
-    const p = mapSrcToCrop(lm[IDX.chin]!.x * srcW, lm[IDX.chin]!.y * srcH);
-    chinCropY = p.y;
+  let landmarks: Landmark[] | null = null;
+  if (lm) {
+    landmarks = lm.map((p) => {
+      const mapped = mapSrcToCrop(p.x * srcW, p.y * srcH);
+      return { x: mapped.x, y: mapped.y, z: p.z };
+    });
+    if (landmarks[IDX.leftEyeOuter] && landmarks[IDX.rightEyeOuter]) {
+      const a = landmarks[IDX.rightEyeOuter]!;
+      const b = landmarks[IDX.leftEyeOuter]!;
+      iod = Math.hypot(b.x - a.x, b.y - a.y) || iod * (outW / cropW);
+    }
+    if (landmarks[IDX.chin]) {
+      chinCropY = landmarks[IDX.chin]!.y;
+    }
+  }
+
+  // Facial core protection envelope
+  let faceEnvCx = outW * 0.5;
+  let faceEnvCy = outH * 0.48;
+  let faceEnvRx = outW * 0.28;
+  let faceEnvRy = outH * 0.32;
+  if (landmarks && landmarks[IDX.forehead] && landmarks[IDX.chin]) {
+    const top = landmarks[IDX.forehead]!;
+    const chin = landmarks[IDX.chin]!;
+    faceEnvCx = (top.x + chin.x) * 0.5;
+    faceEnvCy = (top.y + chin.y) * 0.5;
+    faceEnvRy = Math.abs(chin.y - top.y) * 0.55;
+    faceEnvRx = Math.max(iod * 0.95, faceEnvRy * 0.72);
   }
 
   if (vision.classes && vision.classW > 0) {
@@ -177,8 +202,14 @@ export function headCrop(
             ? 0
             : sampleClass(vision.classes, vision.classW, vision.classH, u, v);
         const i = y * outW + x;
+
+        // Guaranteed facial core: prevents ML model from cutting out dark beards, skin shadows, or features
+        const efx = (x - faceEnvCx) / Math.max(1, faceEnvRx);
+        const efy = (y - faceEnvCy) / Math.max(1, faceEnvRy);
+        const inFaceEnv = efx * efx + efy * efy <= 1.0;
+
         const isHair = c === CLASS_HAIR;
-        const isFace = c === CLASS_FACE;
+        const isFace = c === CLASS_FACE || (landmarks ? inFaceEnv : false);
         const isBody = c === CLASS_BODY;
         const isOthers = c === CLASS_OTHERS; // Glasses and accessories!
         const isHat = c === CLASS_CLOTHES && ly < 0; // Caps / hats above face center
@@ -204,19 +235,6 @@ export function headCrop(
         hairSkin[i] = m > 0.2 ? 1 : 0;
         faceSkin[i] = ny > -0.15 && d < 0.72 ? m : 0;
       }
-    }
-  }
-
-  let landmarks: Landmark[] | null = null;
-  if (lm) {
-    landmarks = lm.map((p) => {
-      const mapped = mapSrcToCrop(p.x * srcW, p.y * srcH);
-      return { x: mapped.x, y: mapped.y, z: p.z };
-    });
-    if (landmarks[IDX.leftEyeOuter] && landmarks[IDX.rightEyeOuter]) {
-      const a = landmarks[IDX.rightEyeOuter]!;
-      const b = landmarks[IDX.leftEyeOuter]!;
-      iod = Math.hypot(b.x - a.x, b.y - a.y) || iod * (outW / cropW);
     }
   }
 

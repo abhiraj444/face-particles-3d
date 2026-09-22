@@ -137,13 +137,18 @@ void main() {
 
   // 0.0 = Monochrome (all B&W/silver), 1.0 = Full Color (source image), 2.0 = Hybrid (mixed color + B&W)
   vec3 col;
+  // Boost color vibrancy & luminance slightly so colors pop against dark background instead of looking dim or washed out
+  vec3 c = aColor;
+  float lum = dot(c, vec3(0.299, 0.587, 0.114));
+  vec3 vividColor = clamp(mix(vec3(lum), c, 1.25) * 1.15, 0.0, 1.0);
+
   if (uColorMode < 0.5) {
     col = vec3(1.0);
   } else if (uColorMode < 1.5) {
-    col = aColor;
+    col = vividColor;
   } else {
     float isCol = step(aSeed, clamp(uColorMix, 0.05, 0.95));
-    col = mix(vec3(1.0), aColor, isCol);
+    col = mix(vec3(1.0), vividColor, isCol);
   }
 
   if (uInvert > 0.5) {

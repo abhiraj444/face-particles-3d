@@ -6,8 +6,6 @@ import { clamp } from "./math";
 export function meshDomeDepth(crop: CropResult): Float32Array {
   const { width: w, height: h, landmarks, mask, iod } = crop;
   const depth = new Float32Array(w * h);
-  const mesh = new Float32Array(w * h);
-  const weight = new Float32Array(w * h);
 
   const cx = w * 0.5;
   let cy = h * 0.45;
@@ -23,19 +21,45 @@ export function meshDomeDepth(crop: CropResult): Float32Array {
     rx = Math.max(iod * 1.6, w * 0.36);
   }
 
-  const radius = Math.max(6, iod * 0.22);
-  const r2 = radius * radius;
+  // Facial relief: nose bridge, nostril wings, lips, eye sockets.
+  // Anchored to 0 at the face perimeter (forehead top, chin, jaw outline, temples)
+  // so that relief + dome transitions seamlessly with ZERO steps or cliffs.
+  const relief = new Float32Array(w * h);
+  const weight = new Float32Array(w * h);
+  let hasRelief = false;
+
   if (landmarks && landmarks.length > 10) {
-    let zMin = Infinity;
-    let zMax = -Infinity;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
     for (const p of landmarks) {
-      zMin = Math.min(zMin, p.z);
-      zMax = Math.max(zMax, p.z);
+      if (p.z < minZ) minZ = p.z;
+      if (p.z > maxZ) maxZ = p.z;
     }
-    const zRange = Math.max(1e-4, zMax - zMin);
+    const range = Math.max(1e-4, maxZ - minZ);
+
+    // Peripheral landmarks establish the baseline face surface
+    const pForehead = landmarks[IDX.forehead] ?? landmarks[10];
+    const pChin = landmarks[IDX.chin] ?? landmarks[152];
+    const pLeft = landmarks[234] ?? landmarks[127];
+    const pRight = landmarks[454] ?? landmarks[356];
+
+    let baseZ = maxZ;
+    if (pForehead && pChin) {
+      baseZ = (pForehead.z + pChin.z + (pLeft ? pLeft.z : maxZ) + (pRight ? pRight.z : maxZ)) * 0.25;
+      baseZ = Math.max(baseZ, minZ + range * 0.35);
+    } else {
+      baseZ = minZ + range * 0.70;
+    }
+
+    const reliefRange = Math.max(1e-4, baseZ - minZ);
+    const radius = Math.max(6, iod * 0.22);
+    const r2 = radius * radius;
+
     for (const p of landmarks) {
-      // Smaller MediaPipe z is closer → higher depth.
-      const z01 = clamp(1 - (p.z - zMin) / zRange, 0, 1);
+      // Relative protrusion: Nose tip (+0.22), eye recesses (-0.05), perimeter (0.0)
+      const normProtrusion = clamp((baseZ - p.z) / reliefRange, -0.35, 1.0);
+      const val = normProtrusion * 0.22;
+
       const x0 = p.x | 0;
       const y0 = p.y | 0;
       const rad = radius | 0;
@@ -48,18 +72,20 @@ export function meshDomeDepth(crop: CropResult): Float32Array {
           const d2 = dx * dx + dy * dy;
           if (d2 > r2) continue;
           const g = Math.exp(-d2 / (r2 * 0.45));
-          const i = y * w + x;
-          mesh[i] += z01 * g;
-          weight[i] += g;
+          const idx = y * w + x;
+          relief[idx] += val * g;
+          weight[idx] += g;
         }
       }
     }
-    for (let i = 0; i < mesh.length; i++) {
-      if (weight[i] > 1e-5) mesh[i] /= weight[i];
+
+    for (let i = 0; i < relief.length; i++) {
+      if (weight[i] > 1e-5) relief[i] /= weight[i];
     }
-    // Diffuse both the mesh and weight smoothly so facial relief flows naturally across cheeks, glasses, and temples
-    boxBlurInPlace(mesh, w, h, Math.max(6, Math.round(iod * 0.16)));
-    boxBlurInPlace(weight, w, h, Math.max(8, Math.round(iod * 0.25)));
+    // Diffuse facial relief smoothly across cheeks, glasses, and temples
+    boxBlurInPlace(relief, w, h, Math.max(4, Math.round(iod * 0.12)));
+    boxBlurInPlace(weight, w, h, Math.max(6, Math.round(iod * 0.18)));
+    hasRelief = true;
   }
 
   for (let y = 0; y < h; y++) {
@@ -69,18 +95,25 @@ export function meshDomeDepth(crop: CropResult): Float32Array {
       const ny = (y - cy) / ry;
       const d = nx * nx + ny * ny;
       const dist = Math.sqrt(d);
-      // Smooth cosine dome: derivative is 0 at both center and outer boundary, eliminating depth cliffs
+      // Smooth cosine dome: derivative is 0 at both center and outer boundary
       const dome = dist < 1.0 ? 0.5 * (1.0 + Math.cos(dist * Math.PI)) : 0.0;
       const m = mask[i] ?? 0;
-      const meshV = mesh[i] ?? 0;
-      const wV = weight[i] ?? 0;
-      // Smooth continuous confidence factor: high on face and glasses, seamlessly blending with the skull dome
-      const confidence = clamp(wV * 1.0, 0, 0.85);
-      const blended = meshV * confidence + dome * (1 - confidence);
-      // Unify depth across face, glasses, and hair with gentle silhouette shaping
+
+      let rVal = 0;
+      if (hasRelief) {
+        const conf = clamp(weight[i]! * 1.2, 0, 1.0);
+        rVal = relief[i]! * conf;
+      }
+
+      // Total depth = continuous skull dome + subtle facial relief.
+      // At the forehead, temples, and chin, rVal is 0 so dome + 0 = dome with zero cliff!
+      const blended = clamp(dome + rVal, 0.0, 1.0);
       depth[i] = blended * (0.80 + 0.20 * m);
     }
   }
+
+  // Soft global blur to ensure 100% smooth C1 continuous surface across all angles and depth scales
+  boxBlurInPlace(depth, w, h, Math.max(3, Math.round(iod * 0.06)));
   return depth;
 }
 

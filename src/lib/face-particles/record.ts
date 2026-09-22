@@ -29,6 +29,7 @@ export interface RecordOptions {
   sequence?: RecordSequenceType;
   customEffects?: EffectName[];
   durationSeconds?: number;
+  colorMode?: "original" | "color" | "mono";
   forceColor?: boolean;
 }
 
@@ -40,7 +41,7 @@ export async function recordTimeline(
   const opts: RecordOptions = typeof options === "number" ? { durationSeconds: options } : options;
   const aspect916 = opts.aspect916 ?? true;
   const sequence = opts.sequence ?? "break_reassemble";
-  const forceColor = opts.forceColor ?? true;
+  const colorChoice = opts.colorMode ?? (opts.forceColor ? "color" : "original");
   const duration = opts.durationSeconds ?? 14;
 
   const mime = pickMime();
@@ -48,9 +49,12 @@ export async function recordTimeline(
 
   // Save previous state to restore upon completion
   const prevColorMode = engine.colorMode;
-  if (forceColor) {
+  if (colorChoice === "color") {
     engine.colorMode = 1;
+  } else if (colorChoice === "mono") {
+    engine.colorMode = 0;
   }
+  // If "original", engine.colorMode stays untouched to perfectly match display!
 
   // 9:16 WhatsApp Status / Reels format (1080x1920)
   if (aspect916) {
@@ -140,7 +144,7 @@ export async function recordTimeline(
     if (aspect916) {
       engine.setRecordingAspect(null);
     }
-    if (forceColor) {
+    if (colorChoice !== "original") {
       engine.colorMode = prevColorMode;
     }
     stream.getTracks().forEach((t) => t.stop());

@@ -17,7 +17,7 @@ export function RecordDialog({ open, onClose, onStart, invert }: RecordDialogPro
   const [sequence, setSequence] = useState<RecordSequenceType>("break_reassemble");
   const [duration, setDuration] = useState<number>(14);
   const [aspect916, setAspect916] = useState<boolean>(true);
-  const [forceColor, setForceColor] = useState<boolean>(true);
+  const [colorChoice, setColorChoice] = useState<"original" | "color" | "mono">("original");
   const [selectedEffects, setSelectedEffects] = useState<EffectName[]>([
     "disassemble",
     "ripple",
@@ -37,7 +37,8 @@ export function RecordDialog({ open, onClose, onStart, invert }: RecordDialogPro
       aspect916,
       sequence,
       durationSeconds: duration,
-      forceColor,
+      colorMode: colorChoice,
+      forceColor: colorChoice === "color",
       customEffects: sequence === "custom" ? selectedEffects : undefined,
     });
     onClose();
@@ -102,24 +103,44 @@ export function RecordDialog({ open, onClose, onStart, invert }: RecordDialogPro
               </div>
               <Switch checked={aspect916} onCheckedChange={setAspect916} invert={invert} />
             </label>
+          </div>
 
-            <label
-              className={cn(
-                "flex items-center justify-between p-3 rounded-xl border transition-colors",
-                invert ? "border-neutral-200 bg-neutral-50" : "border-border/60 bg-bg/40",
-              )}
-            >
-              <div className="flex items-center gap-2.5">
-                <Sparkles className="size-4 text-amber-500" />
-                <div>
-                  <div className="text-xs font-semibold">Full Color Particles</div>
-                  <div className={cn("text-[11px]", invert ? "text-neutral-500" : "text-fg-subtle")}>
-                    Renders video with photorealistic source colors
-                  </div>
-                </div>
-              </div>
-              <Switch checked={forceColor} onCheckedChange={setForceColor} invert={invert} />
-            </label>
+          {/* Particle Appearance */}
+          <div>
+            <div className={cn("text-xs font-medium uppercase tracking-[0.12em] mb-2", invert ? "text-neutral-500" : "text-fg-subtle")}>
+              Particle Colors
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { id: "original", label: "Match Display", desc: "Same as screen" },
+                { id: "color", label: "Vibrant Color", desc: "Full photo color" },
+                { id: "mono", label: "Monochrome", desc: "White / silver" },
+              ].map((opt) => {
+                const active = colorChoice === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setColorChoice(opt.id as "original" | "color" | "mono")}
+                    className={cn(
+                      "flex flex-col p-2.5 rounded-xl border text-left transition-all",
+                      active
+                        ? invert
+                          ? "border-neutral-900 bg-neutral-900 text-white shadow-sm"
+                          : "border-accent bg-accent/15 text-fg font-medium"
+                        : invert
+                          ? "border-neutral-200 bg-white hover:border-neutral-300 text-neutral-800"
+                          : "border-border/60 bg-bg/30 hover:border-border text-fg-muted",
+                    )}
+                  >
+                    <span className="text-xs font-semibold">{opt.label}</span>
+                    <span className={cn("text-[10px] mt-0.5", active ? (invert ? "text-neutral-300" : "text-fg/80") : (invert ? "text-neutral-500" : "text-fg-subtle"))}>
+                      {opt.desc}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Animation Sequence Selection */}

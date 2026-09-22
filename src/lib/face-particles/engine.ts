@@ -609,7 +609,7 @@ export class ParticleEngine {
     const yaw = clamp(this.yaw + this.gyroYaw + idleY, -ORBIT_LIMIT, ORBIT_LIMIT);
     const pitch = clamp(this.pitch + this.gyroPitch + idleP, -ORBIT_LIMIT, ORBIT_LIMIT);
     const baseDist = 2.45;
-    const dist = aspect < 1.0 ? baseDist / Math.min(1.0, aspect / 0.65) : baseDist;
+    const dist = aspect < 1.0 ? baseDist * 0.98 : baseDist;
     this.tmpEye[0] = Math.sin(yaw) * Math.cos(pitch) * dist;
     this.tmpEye[1] = Math.sin(pitch) * dist;
     this.tmpEye[2] = Math.cos(yaw) * Math.cos(pitch) * dist;
@@ -632,7 +632,12 @@ export class ParticleEngine {
     gl.uniformMatrix4fv(this.uRender.uViewProj, false, this.viewProj);
     const n = Math.max(1000, this.drawCount);
     const size = this.size * Math.sqrt(POINT_SIZE_REF_N / n);
-    const dpr = Math.min(2.5, typeof window !== "undefined" ? (window.devicePixelRatio || 1) : 1);
+    const baseDpr = Math.min(2.5, typeof window !== "undefined" ? (window.devicePixelRatio || 1) : 1);
+    // When recording to a fixed high-resolution buffer (e.g. 1080x1920), scale DPR so particles
+    // retain identical visual size, density, and opacity as on the interactive canvas
+    const dpr = this.recordDims
+      ? (this.recordDims[1] / Math.max(1, this.canvas.clientHeight || 720)) * baseDpr
+      : baseDpr;
     gl.uniform1f(this.uRender.uSize, size);
     gl.uniform1f(this.uRender.uDpr, dpr);
     gl.uniform2f(this.uRender.uPointRange, this.pointRange[0], this.pointRange[1]);
