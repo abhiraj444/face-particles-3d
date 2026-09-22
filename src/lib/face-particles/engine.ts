@@ -379,16 +379,14 @@ export class ParticleEngine {
       this.effectT = 0;
       this.setState("effect");
     } else if (name === "fill") {
-      // Scatter all particles above the scene, then let them rain down
-      this.assemble = 0;
-      this.targetAssemble = 0;
-      this.mode = 5; // fill mode — uses uEffectT as a sweepline
+      this.assemble = 1;
+      this.targetAssemble = 1;
+      this.mode = 5; // fill mode — uses uEffectT as a sweepline descending through the face
       this.effectAmp = 0;
-      this.effectT = 0;
-      this.spring = 12;
-      this.damp = 3.2;
-      this.turb = 0.3;
-      // Scatter particles upward in the GPU buffers
+      this.effectT = 0.60;
+      this.spring = 16;
+      this.damp = 3.6;
+      this.turb = 0.12;
       this.scatterAbove();
       this.setState("filling");
     } else if (name === "idle") {
@@ -398,34 +396,34 @@ export class ParticleEngine {
     }
   }
 
-  /** Scatter all particles above the scene for the fill/rain animation */
+  /** Scatter particles to the top edge of the visible screen to rain down */
   private scatterAbove(): void {
     const gl = this.gl;
     const set = this.set;
-    if (!gl || !set || !this.posBuf) return;
+    if (!gl || !set || !this.posBuf || !this.velBuf) return;
     const n = set.count;
     const pos = new Float32Array(n * 3);
     const vel = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       const s = set.seed[i] ?? 0;
-      // Stagger start heights based on home.y: particles destined for lower parts of the face start higher up
-      // so they rain down in a continuous cascade
-      pos[i * 3] = set.home[i * 3]! + (s - 0.5) * 0.25;
-      pos[i * 3 + 1] = 1.6 + (1.2 - set.home[i * 3 + 1]!) * 0.8 + s * 0.5;
-      pos[i * 3 + 2] = set.home[i * 3 + 2]! + (s - 0.5) * 0.2;
-      vel[i * 3] = (s - 0.5) * 0.1;
-      vel[i * 3 + 1] = -0.8 - s * 0.4;
+      // Horizontally aligned with home X + slight spray
+      pos[i * 3] = set.home[i * 3]! + (s - 0.5) * 0.08;
+      // Start near the top of the visible screen [0.55, 0.70] so particles are immediately visible!
+      pos[i * 3 + 1] = 0.55 + s * 0.15;
+      pos[i * 3 + 2] = set.home[i * 3 + 2]! + (s - 0.5) * 0.05;
+      vel[i * 3] = (s - 0.5) * 0.04;
+      vel[i * 3 + 1] = -0.3 - s * 0.2;
       vel[i * 3 + 2] = 0;
     }
-    // Upload to both ping-pong buffers
-    for (const buf of this.posBuf) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bindVertexArray(null);
+    gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null);
+    for (let b = 0; b < 2; b++) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuf[b]);
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, pos);
-    }
-    for (const buf of this.velBuf!) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.velBuf[b]);
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, vel);
     }
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
   }
 
   snapshot(): Promise<Blob> {
@@ -512,19 +510,16 @@ export class ParticleEngine {
       }
     }
     if (this.state === "filling") {
-      // Sweep line progresses from top (+1.5) to bottom (-1.5) over ~4 seconds
-      const sweepDuration = 4.0;
+      const sweepDuration = 3.2;
       const progress = Math.min(1.0, this.effectTimer / sweepDuration);
-      // Sweep from top (Y=+1.5) down to bottom (Y=-1.5)
-      const sweepY = 1.5 - progress * 3.0;
+      // Sweep line descends from top of head (+0.60) through chin (-0.60)
+      const sweepY = 0.60 - progress * 1.25;
       this.effectT = sweepY;
-      // Progressively increase spring for particles above the sweep line
-      // Particles whose home.y >= sweepY get targetAssemble = 1
-      this.targetAssemble = progress;
-      this.assemble = progress;
       if (progress >= 1.0) {
         this.mode = 0;
         this.turb = 0.16;
+        this.spring = 14;
+        this.damp = 3.2;
         this.targetAssemble = 1;
         this.assemble = 1;
         this.setState("assembled");

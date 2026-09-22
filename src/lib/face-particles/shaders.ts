@@ -51,12 +51,15 @@ vec3 curlNoise(vec3 p) {
 void main() {
   vec3 f = vec3(0.0);
   if (uMode > 4.5) {
-    // Fill mode: particles cascade from above and settle layer-by-layer from top to bottom
-    float reach = smoothstep(uEffectT - 0.2, uEffectT + 0.15, aHome.y);
-    f += (aHome - aPos) * (uSpring * 1.6) * reach;
-    // Falling gravity for particles not yet locked in place
-    f.y -= (1.0 - reach) * 2.2;
-    f.x += sin(uTime * 3.5 + aSeed * 12.0) * (1.0 - reach) * 0.25;
+    // Fill mode: particles drop from top and settle layer-by-layer from top to bottom
+    float reach = smoothstep(uEffectT - 0.12, uEffectT + 0.08, aHome.y);
+    vec3 springForce = (aHome - aPos) * (uSpring * 1.8);
+    vec3 rainForce = vec3(
+      (aHome.x - aPos.x) * 8.0 + sin(uTime * 8.0 + aSeed * 25.0) * 0.15,
+      -1.5,
+      (aHome.z - aPos.z) * 6.0
+    );
+    f += mix(rainForce, springForce, reach);
   } else {
     float k = smoothstep(aSeed * 0.6, aSeed * 0.6 + 0.4, uAssemble);
     f += (aHome - aPos) * uSpring * k;
