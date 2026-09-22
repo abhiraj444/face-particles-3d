@@ -378,10 +378,53 @@ export class ParticleEngine {
       this.effectAmp = 5.5;
       this.effectT = 0;
       this.setState("effect");
+    } else if (name === "fill") {
+      // Scatter all particles above the scene, then let them rain down
+      this.assemble = 0;
+      this.targetAssemble = 0;
+      this.mode = 5; // fill mode — uses uEffectT as a sweepline
+      this.effectAmp = 0;
+      this.effectT = 0;
+      this.spring = 12;
+      this.damp = 3.2;
+      this.turb = 0.3;
+      // Scatter particles upward in the GPU buffers
+      this.scatterAbove();
+      this.setState("filling");
     } else if (name === "idle") {
       this.targetAssemble = 1;
       this.mode = 0;
       this.setState("assembled");
+    }
+  }
+
+  /** Scatter all particles above the scene for the fill/rain animation */
+  private scatterAbove(): void {
+    const gl = this.gl;
+    const set = this.set;
+    if (!gl || !set || !this.posBuf) return;
+    const n = set.count;
+    const pos = new Float32Array(n * 3);
+    const vel = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const s = set.seed[i] ?? 0;
+      // Stagger start heights based on home.y: particles destined for lower parts of the face start higher up
+      // so they rain down in a continuous cascade
+      pos[i * 3] = set.home[i * 3]! + (s - 0.5) * 0.25;
+      pos[i * 3 + 1] = 1.6 + (1.2 - set.home[i * 3 + 1]!) * 0.8 + s * 0.5;
+      pos[i * 3 + 2] = set.home[i * 3 + 2]! + (s - 0.5) * 0.2;
+      vel[i * 3] = (s - 0.5) * 0.1;
+      vel[i * 3 + 1] = -0.8 - s * 0.4;
+      vel[i * 3 + 2] = 0;
+    }
+    // Upload to both ping-pong buffers
+    for (const buf of this.posBuf) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, pos);
+    }
+    for (const buf of this.velBuf!) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, vel);
     }
   }
 
@@ -457,7 +500,35 @@ export class ParticleEngine {
     }
     if (this.state === "disassembling") {
       this.effectAmp *= Math.exp(-dt * 1.8);
-      if (this.assemble < 0.08 && this.effectTimer > 1.2) this.setState("scattered");
+      if (this.assemble < 0.08 && this.effectTimer > 1.5) {
+        // Auto-reassemble after breaking apart
+        this.targetAssemble = 1;
+        this.spring = 16;
+        this.damp = 3.4;
+        this.turb = 0.35;
+        this.mode = 0;
+        this.effectAmp = 0;
+        this.setState("assembling");
+      }
+    }
+    if (this.state === "filling") {
+      // Sweep line progresses from top (+1.5) to bottom (-1.5) over ~4 seconds
+      const sweepDuration = 4.0;
+      const progress = Math.min(1.0, this.effectTimer / sweepDuration);
+      // Sweep from top (Y=+1.5) down to bottom (Y=-1.5)
+      const sweepY = 1.5 - progress * 3.0;
+      this.effectT = sweepY;
+      // Progressively increase spring for particles above the sweep line
+      // Particles whose home.y >= sweepY get targetAssemble = 1
+      this.targetAssemble = progress;
+      this.assemble = progress;
+      if (progress >= 1.0) {
+        this.mode = 0;
+        this.turb = 0.16;
+        this.targetAssemble = 1;
+        this.assemble = 1;
+        this.setState("assembled");
+      }
     }
     if (this.state === "effect") {
       if (this.mode === 2) this.effectOrigin[0] = -1.4 + this.effectTimer * 1.15;
@@ -537,16 +608,13 @@ export class ParticleEngine {
     const gl = this.gl!;
     const aspect = this.recordAspect ?? (gl.drawingBufferWidth / Math.max(1, gl.drawingBufferHeight));
     const baseFov = (32 * Math.PI) / 180;
-    // On tall mobile screens or 9:16 vertical recording, adapt field of view so portrait width fills the display naturally
-    const fov = aspect < 1.0
-      ? 2 * Math.atan(Math.tan(baseFov / 2) * (0.88 / Math.max(0.45, aspect)))
-      : baseFov;
-    perspective(this.proj, fov, aspect, 0.1, 20);
+    perspective(this.proj, baseFov, aspect, 0.1, 20);
     const idleY = this.idleOrbit && !this.userOrbit ? Math.sin(this.time * 0.18) * 0.1 : 0;
     const idleP = this.idleOrbit && !this.userOrbit ? Math.cos(this.time * 0.13) * 0.03 : 0;
     const yaw = clamp(this.yaw + this.gyroYaw + idleY, -ORBIT_LIMIT, ORBIT_LIMIT);
     const pitch = clamp(this.pitch + this.gyroPitch + idleP, -ORBIT_LIMIT, ORBIT_LIMIT);
-    const dist = 2.45;
+    const baseDist = 2.45;
+    const dist = aspect < 1.0 ? baseDist / Math.min(1.0, aspect / 0.65) : baseDist;
     this.tmpEye[0] = Math.sin(yaw) * Math.cos(pitch) * dist;
     this.tmpEye[1] = Math.sin(pitch) * dist;
     this.tmpEye[2] = Math.cos(yaw) * Math.cos(pitch) * dist;

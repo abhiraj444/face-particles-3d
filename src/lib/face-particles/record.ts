@@ -22,7 +22,7 @@ function wait(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-export type RecordSequenceType = "assemble_disassemble" | "full" | "custom";
+export type RecordSequenceType = "break_reassemble" | "fill_break" | "custom";
 
 export interface RecordOptions {
   aspect916?: boolean;
@@ -39,9 +39,9 @@ export async function recordTimeline(
 ): Promise<Blob> {
   const opts: RecordOptions = typeof options === "number" ? { durationSeconds: options } : options;
   const aspect916 = opts.aspect916 ?? true;
-  const sequence = opts.sequence ?? "assemble_disassemble";
+  const sequence = opts.sequence ?? "break_reassemble";
   const forceColor = opts.forceColor ?? true;
-  const duration = opts.durationSeconds ?? (sequence === "assemble_disassemble" ? 14 : 30);
+  const duration = opts.durationSeconds ?? 14;
 
   const mime = pickMime();
   if (mime === null) throw new Error("Recording is not supported in this browser.");
@@ -49,7 +49,6 @@ export async function recordTimeline(
   // Save previous state to restore upon completion
   const prevColorMode = engine.colorMode;
   if (forceColor) {
-    // 1 = Full RGB source colors
     engine.colorMode = 1;
   }
 
@@ -78,50 +77,54 @@ export async function recordTimeline(
   recorder.start(200);
 
   try {
-    if (sequence === "assemble_disassemble") {
-      // Clean, elegant Assemble & Disassemble loop tailored for WhatsApp status
-      const partTime = Math.max(2500, Math.round((duration * 1000) / 3));
+    if (sequence === "break_reassemble") {
+      // Break apart and auto-reassemble, then ripple
+      const partTime = Math.max(2500, Math.round((duration * 1000) / 4));
 
-      // 1. Assemble
-      onTick?.("Phase 1/3 · Assembling Face");
-      engine.play("build");
-      await wait(partTime);
-
-      // 2. Hold & Shimmer in resting face portrait
-      onTick?.("Phase 2/3 · Shimmer Portrait");
+      // 1. Hold assembled portrait briefly
+      onTick?.("Phase 1/4 · Portrait Hold");
       engine.play("assemble");
       await wait(partTime);
 
-      // 3. Disassemble
-      onTick?.("Phase 3/3 · Dispersing Into Space");
+      // 2. Break apart (disassemble + auto-reassemble)
+      onTick?.("Phase 2/4 · Breaking Apart");
       engine.play("disassemble");
       await wait(partTime);
-    } else if (sequence === "full") {
-      // Full showcase with all 5 effects
-      const rounds = duration >= 24 ? 2 : 1;
-      const effectList: { name: EffectName; label: string }[] = [
-        { name: "build", label: "Assemble" },
-        { name: "ripple", label: "Ripple Wave" },
-        { name: "wind", label: "Wind Stream" },
-        { name: "vortex", label: "Vortex Spiral" },
-        { name: "disassemble", label: "Particle Break" },
-      ];
 
-      const stepMs = Math.round((duration * 1000) / (rounds * effectList.length));
+      // 3. Wait for reassembly
+      onTick?.("Phase 3/4 · Reassembling");
+      await wait(partTime);
 
-      for (let r = 1; r <= rounds; r++) {
-        for (let i = 0; i < effectList.length; i++) {
-          const eff = effectList[i]!;
-          onTick?.(rounds > 1 ? `Round ${r}/${rounds} · ${eff.label} (${i + 1}/5)` : `${eff.label} (${i + 1}/5)`);
-          engine.play(eff.name);
-          await wait(stepMs);
-        }
-      }
+      // 4. Ripple effect
+      onTick?.("Phase 4/4 · Ripple Wave");
+      engine.play("ripple");
+      await wait(partTime);
+    } else if (sequence === "fill_break") {
+      // Fill from top, then break apart and reassemble
+      const partTime = Math.max(3000, Math.round((duration * 1000) / 4));
+
+      // 1. Fill from top
+      onTick?.("Phase 1/4 · Filling Portrait");
+      engine.play("fill");
+      await wait(partTime * 1.4);
+
+      // 2. Hold assembled
+      onTick?.("Phase 2/4 · Portrait Shimmer");
+      await wait(partTime * 0.6);
+
+      // 3. Break apart (auto-reassembles)
+      onTick?.("Phase 3/4 · Breaking Apart");
+      engine.play("disassemble");
+      await wait(partTime);
+
+      // 4. Reassembly
+      onTick?.("Phase 4/4 · Coming Together");
+      await wait(partTime);
     } else {
       // Custom selected effects
       const effects = opts.customEffects && opts.customEffects.length > 0
         ? opts.customEffects
-        : (["assemble", "disassemble"] as EffectName[]);
+        : (["disassemble", "ripple"] as EffectName[]);
 
       const stepMs = Math.round((duration * 1000) / effects.length);
       for (let i = 0; i < effects.length; i++) {

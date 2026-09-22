@@ -9,11 +9,9 @@ import {
   ImagePlus,
   Loader2,
   Printer,
-  RotateCcw,
   ScanFace,
   Upload,
   Video,
-  Wind,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -435,11 +433,9 @@ export function FaceParticlesApp() {
             >
               {(
                 [
-                  ["assemble", "Assemble", ScanFace],
                   ["disassemble", "Break", Aperture],
-                  ["wind", "Wind", Wind],
-                  ["vortex", "Vortex", RotateCcw],
                   ["ripple", "Ripple", Contrast],
+                  ["fill", "Fill", ScanFace],
                 ] as const
               ).map(([id, label, Icon]) => (
                 <button

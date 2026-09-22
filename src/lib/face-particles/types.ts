@@ -80,6 +80,7 @@ export type EffectName =
   | "wind"
   | "vortex"
   | "ripple"
+  | "fill"
   | "idle";
 
 export type AnimState =
@@ -88,4 +89,5 @@ export type AnimState =
   | "disassembling"
   | "scattered"
   | "assembling"
+  | "filling"
   | "effect";

@@ -14,14 +14,14 @@ interface RecordDialogProps {
 }
 
 export function RecordDialog({ open, onClose, onStart, invert }: RecordDialogProps) {
-  const [sequence, setSequence] = useState<RecordSequenceType>("assemble_disassemble");
+  const [sequence, setSequence] = useState<RecordSequenceType>("break_reassemble");
   const [duration, setDuration] = useState<number>(14);
   const [aspect916, setAspect916] = useState<boolean>(true);
   const [forceColor, setForceColor] = useState<boolean>(true);
   const [selectedEffects, setSelectedEffects] = useState<EffectName[]>([
-    "assemble",
-    "ripple",
     "disassemble",
+    "ripple",
+    "fill",
   ]);
 
   if (!open) return null;
@@ -47,7 +47,7 @@ export function RecordDialog({ open, onClose, onStart, invert }: RecordDialogPro
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div
         className={cn(
-          "relative w-full max-w-md rounded-[28px] border p-6 shadow-2xl transition-colors",
+          "relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-[28px] border p-6 shadow-2xl transition-colors",
           invert
             ? "border-neutral-200 bg-white text-neutral-900 shadow-neutral-900/10"
             : "border-border bg-bg-elevated text-fg",
@@ -130,16 +130,16 @@ export function RecordDialog({ open, onClose, onStart, invert }: RecordDialogPro
             <div className="grid grid-cols-3 gap-2">
               {[
                 {
-                  id: "assemble_disassemble",
-                  label: "Assemble & Disperse",
-                  sub: "Clean & Impactful",
+                  id: "break_reassemble",
+                  label: "Break & Reform",
+                  sub: "Disperse + Reassemble",
                   defDur: 14,
                 },
                 {
-                  id: "full",
-                  label: "Full Showcase",
-                  sub: "All 5 Effects",
-                  defDur: 24,
+                  id: "fill_break",
+                  label: "Fill & Break",
+                  sub: "Rain fill + Disperse",
+                  defDur: 20,
                 },
                 {
                   id: "custom",
@@ -195,8 +195,13 @@ export function RecordDialog({ open, onClose, onStart, invert }: RecordDialogPro
                 Select Effects to Chain
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {(["assemble", "ripple", "wind", "vortex", "disassemble"] as EffectName[]).map((eff) => {
+                {(["disassemble", "ripple", "fill"] as EffectName[]).map((eff) => {
                   const sel = selectedEffects.includes(eff);
+                  const labels: Record<string, string> = {
+                    disassemble: "Break",
+                    ripple: "Ripple",
+                    fill: "Fill",
+                  };
                   return (
                     <button
                       key={eff}
@@ -214,7 +219,7 @@ export function RecordDialog({ open, onClose, onStart, invert }: RecordDialogPro
                       )}
                     >
                       {sel && <Check className="size-3" />}
-                      <span className="capitalize">{eff}</span>
+                      <span>{labels[eff] ?? eff}</span>
                     </button>
                   );
                 })}

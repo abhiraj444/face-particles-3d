@@ -49,8 +49,19 @@ vec3 curlNoise(vec3 p) {
 }
 
 void main() {
-  float k = smoothstep(aSeed * 0.6, aSeed * 0.6 + 0.4, uAssemble);
-  vec3 f = (aHome - aPos) * uSpring * k;
+  vec3 f = vec3(0.0);
+  if (uMode > 4.5) {
+    // Fill mode: particles cascade from above and settle layer-by-layer from top to bottom
+    float reach = smoothstep(uEffectT - 0.2, uEffectT + 0.15, aHome.y);
+    f += (aHome - aPos) * (uSpring * 1.6) * reach;
+    // Falling gravity for particles not yet locked in place
+    f.y -= (1.0 - reach) * 2.2;
+    f.x += sin(uTime * 3.5 + aSeed * 12.0) * (1.0 - reach) * 0.25;
+  } else {
+    float k = smoothstep(aSeed * 0.6, aSeed * 0.6 + 0.4, uAssemble);
+    f += (aHome - aPos) * uSpring * k;
+  }
+
   for (int i = 0; i < 5; i++) {
     vec2 d = aPos.xy - uTouch[i].xy;
     float rz = max(uTouch[i].z, 0.0001);
@@ -63,7 +74,7 @@ void main() {
 
   if (uMode > 0.5 && uMode < 1.5) {
     vec2 t = aPos.xy - uEffectOrigin;
-    f.xy += vec2(-t.y, t.x) * uEffectAmp * (1.0 - k * 0.25);
+    f.xy += vec2(-t.y, t.x) * uEffectAmp * (1.0 - uAssemble * 0.25);
   } else if (uMode > 1.5 && uMode < 2.5) {
     float wave = smoothstep(uEffectOrigin.x - 0.55, uEffectOrigin.x + 0.15, aPos.x);
     f.x += uEffectAmp * wave;
@@ -73,7 +84,7 @@ void main() {
     float dist = length(d);
     float ring = exp(-pow(dist - uEffectT * 1.85, 2.0) * 26.0);
     f.xy += (d / (dist + 1e-4)) * ring * uEffectAmp;
-  } else if (uMode > 3.5) {
+  } else if (uMode > 3.5 && uMode < 4.5) {
     vec3 d = aPos - vec3(uEffectOrigin, 0.0);
     float dist = length(d);
     f += normalize(d + vec3(0.0, 0.0, 0.12) + 1e-4) * uEffectAmp * (0.45 + aSeed) / (dist + 0.18);

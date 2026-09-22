@@ -165,10 +165,8 @@ export async function analyze(source: HTMLCanvasElement): Promise<VisionResult> 
       const result = landmarker.detect(inferSource);
       if (result.faceLandmarks && result.faceLandmarks.length > 0) {
         hasFace = true;
-        // If multiple faces, select the one with the largest bounding box area
         let bestFace = result.faceLandmarks[0]!;
         let maxArea = -1;
-
         for (const face of result.faceLandmarks) {
           let minX = 1, minY = 1, maxX = 0, maxY = 0;
           for (const p of face) {
@@ -183,16 +181,44 @@ export async function analyze(source: HTMLCanvasElement): Promise<VisionResult> 
             bestFace = face;
           }
         }
-
-        landmarks = bestFace.map((p) => ({
-          x: p.x,
-          y: p.y,
-          z: p.z,
-        }));
+        landmarks = bestFace.map((p) => ({ x: p.x, y: p.y, z: p.z }));
       }
     } catch (err) {
-      console.warn("[Vision] Face detection failed:", err);
-      degradedLandmarker = true;
+      console.warn("[Vision] GPU Face detection failed, falling back to CPU:", err);
+      try {
+        const wasm = (await getWasmFileset()) as Parameters<typeof FaceLandmarker.createFromOptions>[0];
+        const cpuLandmarker = await FaceLandmarker.createFromOptions(wasm, {
+          baseOptions: { modelAssetPath: LOCAL_LANDMARKER_MODEL, delegate: "CPU" },
+          runningMode: "IMAGE",
+          numFaces: 4,
+          minFaceDetectionConfidence: 0.4,
+          minFacePresenceConfidence: 0.4,
+        });
+        const result = cpuLandmarker.detect(inferSource);
+        if (result.faceLandmarks && result.faceLandmarks.length > 0) {
+          hasFace = true;
+          let bestFace = result.faceLandmarks[0]!;
+          let maxArea = -1;
+          for (const face of result.faceLandmarks) {
+            let minX = 1, minY = 1, maxX = 0, maxY = 0;
+            for (const p of face) {
+              minX = Math.min(minX, p.x);
+              minY = Math.min(minY, p.y);
+              maxX = Math.max(maxX, p.x);
+              maxY = Math.max(maxY, p.y);
+            }
+            const area = Math.max(0, maxX - minX) * Math.max(0, maxY - minY);
+            if (area > maxArea) {
+              maxArea = area;
+              bestFace = face;
+            }
+          }
+          landmarks = bestFace.map((p) => ({ x: p.x, y: p.y, z: p.z }));
+        }
+      } catch (cpuErr) {
+        console.warn("[Vision] CPU Face detection also failed:", cpuErr);
+        degradedLandmarker = true;
+      }
     }
   }
 
@@ -208,18 +234,37 @@ export async function analyze(source: HTMLCanvasElement): Promise<VisionResult> 
         const mask = segResult.categoryMask;
         classW = mask.width;
         classH = mask.height;
-        // Copy to standalone Uint8Array
         classes = new Uint8Array(mask.getAsUint8Array());
         mask.close();
       }
       if (segResult.confidenceMasks) {
-        for (const m of segResult.confidenceMasks) {
-          m.close();
-        }
+        for (const m of segResult.confidenceMasks) m.close();
       }
     } catch (err) {
-      console.warn("[Vision] Image segmentation failed:", err);
-      degradedSegmenter = true;
+      console.warn("[Vision] GPU Segmentation failed, falling back to CPU:", err);
+      try {
+        const wasm = (await getWasmFileset()) as Parameters<typeof ImageSegmenter.createFromOptions>[0];
+        const cpuSegmenter = await ImageSegmenter.createFromOptions(wasm, {
+          baseOptions: { modelAssetPath: LOCAL_SEGMENTER_MODEL, delegate: "CPU" },
+          runningMode: "IMAGE",
+          outputCategoryMask: true,
+          outputConfidenceMasks: false,
+        });
+        const segResult = cpuSegmenter.segment(inferSource);
+        if (segResult.categoryMask) {
+          const mask = segResult.categoryMask;
+          classW = mask.width;
+          classH = mask.height;
+          classes = new Uint8Array(mask.getAsUint8Array());
+          mask.close();
+        }
+        if (segResult.confidenceMasks) {
+          for (const m of segResult.confidenceMasks) m.close();
+        }
+      } catch (cpuErr) {
+        console.warn("[Vision] CPU Segmentation also failed:", cpuErr);
+        degradedSegmenter = true;
+      }
     }
   }
 
