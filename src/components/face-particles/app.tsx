@@ -195,13 +195,13 @@ export function FaceParticlesApp() {
   const onRecord = async () => {
     const engine = engineRef.current;
     if (!engine || recording) return;
-    setRecording("Preparing");
+    setRecording("Starting 30s Recording");
     setHero(false);
     setSheet(false);
     try {
-      const blob = await recordTimeline(engine, 8, (label) => setRecording(label));
+      const blob = await recordTimeline(engine, 30, (label) => setRecording(label));
       const ext = blob.type.includes("mp4") ? "mp4" : "webm";
-      downloadBlob(blob, `face-particles.${ext}`);
+      downloadBlob(blob, `face-particles-30s.${ext}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not record.");
     } finally {
@@ -221,7 +221,12 @@ export function FaceParticlesApp() {
   };
 
   return (
-    <main className="relative h-dvh w-full overflow-hidden bg-bg text-fg">
+    <main
+      className={cn(
+        "relative h-dvh w-full overflow-hidden transition-colors duration-300",
+        params.invert ? "bg-[#faf8f5] text-neutral-900" : "bg-bg text-fg",
+      )}
+    >
       <canvas
         ref={canvasRef}
         className="absolute inset-0 size-full touch-none"
@@ -241,7 +246,14 @@ export function FaceParticlesApp() {
 
       {busy && (
         <div className="pointer-events-none absolute inset-x-0 top-[max(1.25rem,env(safe-area-inset-top))] z-20 flex justify-center px-4">
-          <div className="flex items-center gap-3 rounded-[var(--radius-lg)] border border-border bg-bg-elevated/90 px-4 py-2.5 text-sm text-fg-muted">
+          <div
+            className={cn(
+              "flex items-center gap-3 rounded-[var(--radius-lg)] border px-4 py-2.5 text-sm shadow-lg backdrop-blur-md",
+              params.invert
+                ? "border-neutral-300 bg-white/90 text-neutral-800"
+                : "border-border bg-bg-elevated/90 text-fg-muted",
+            )}
+          >
             <Loader2 className="size-4 animate-spin text-accent" />
             <span>{busy.stage}</span>
             <span className="tabular-nums text-fg-subtle">{Math.round(busy.fraction * 100)}%</span>
@@ -249,26 +261,75 @@ export function FaceParticlesApp() {
         </div>
       )}
 
+      {recording && (
+        <div className="pointer-events-none absolute inset-x-0 top-[max(1.25rem,env(safe-area-inset-top))] z-30 flex justify-center px-4">
+          <div className="flex items-center gap-2.5 rounded-full border border-red-500/40 bg-red-950/85 px-4 py-2 text-xs font-semibold text-red-100 shadow-2xl backdrop-blur-md animate-pulse">
+            <span className="relative flex size-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+              <span className="relative inline-flex size-2.5 rounded-full bg-red-500" />
+            </span>
+            <span>Recording 30s · {recording}</span>
+          </div>
+        </div>
+      )}
+
       <header className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div className="pointer-events-auto">
-          <p className="font-display text-xl tracking-tight text-fg">Face Particles</p>
-          <p className="text-[11px] uppercase tracking-[0.18em] text-fg-subtle">On-device</p>
+          <p
+            className={cn(
+              "font-display text-xl tracking-tight transition-colors",
+              params.invert ? "text-neutral-900" : "text-fg",
+            )}
+          >
+            Face Particles
+          </p>
+          <p
+            className={cn(
+              "text-[11px] uppercase tracking-[0.18em] transition-colors",
+              params.invert ? "text-neutral-600 font-semibold" : "text-fg-subtle",
+            )}
+          >
+            On-device
+          </p>
         </div>
         <div className="pointer-events-auto flex gap-2">
           {!hero && (
-            <Button variant="secondary" size="icon" aria-label="New photo" onClick={() => setHero(true)}>
+            <Button
+              variant="secondary"
+              size="icon"
+              aria-label="New photo"
+              onClick={() => setHero(true)}
+              className={
+                params.invert
+                  ? "border-neutral-300 bg-white/85 text-neutral-900 shadow-sm hover:bg-white backdrop-blur-md"
+                  : ""
+              }
+            >
               <ImagePlus className="size-5" />
             </Button>
           )}
-          <Button variant="secondary" size="icon" aria-label="Save still" onClick={() => void onSaveStill()}>
+          <Button
+            variant="secondary"
+            size="icon"
+            aria-label="Save still"
+            onClick={() => void onSaveStill()}
+            className={
+              params.invert
+                ? "border-neutral-300 bg-white/85 text-neutral-900 shadow-sm hover:bg-white backdrop-blur-md"
+                : ""
+            }
+          >
             <Download className="size-5" />
           </Button>
           <Button
             variant="primary"
             size="icon"
-            aria-label="Record"
+            aria-label="Record 30s video"
             disabled={!hasPortrait || Boolean(recording)}
             onClick={() => void onRecord()}
+            className={
+              params.invert ? "bg-neutral-900 text-white hover:bg-neutral-800 shadow-sm" : ""
+            }
           >
             {recording ? <Loader2 className="size-5 animate-spin" /> : <Video className="size-5" />}
           </Button>
@@ -329,7 +390,14 @@ export function FaceParticlesApp() {
               sheet ? "pointer-events-none opacity-0" : "opacity-100",
             )}
           >
-            <div className="pointer-events-auto flex max-w-full gap-1 overflow-x-auto rounded-full border border-border bg-bg-elevated/90 p-1">
+            <div
+              className={cn(
+                "pointer-events-auto flex max-w-full gap-1 overflow-x-auto rounded-full border p-1 shadow-lg backdrop-blur-xl transition-colors",
+                params.invert
+                  ? "border-neutral-300/90 bg-white/90 text-neutral-800 shadow-neutral-200/50"
+                  : "border-border bg-bg-elevated/90 text-fg-muted",
+              )}
+            >
               {(
                 [
                   ["assemble", "Assemble", ScanFace],
@@ -344,8 +412,11 @@ export function FaceParticlesApp() {
                   type="button"
                   onClick={() => play(id)}
                   className={cn(
-                    "flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-medium text-fg-muted hover:bg-bg-subtle hover:text-fg",
-                    anim === "effect" && "text-fg",
+                    "flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors",
+                    params.invert
+                      ? "text-neutral-700 hover:bg-neutral-100 hover:text-neutral-950"
+                      : "text-fg-muted hover:bg-bg-subtle hover:text-fg",
+                    anim === "effect" && (params.invert ? "text-neutral-950 font-semibold" : "text-fg"),
                   )}
                 >
                   <Icon className="size-3.5" />
@@ -357,94 +428,148 @@ export function FaceParticlesApp() {
 
           <div
             className={cn(
-              "absolute inset-x-0 bottom-0 z-10 transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-              sheet ? "translate-y-0" : "translate-y-[calc(100%-5.25rem)]",
+              "pointer-events-auto absolute inset-x-0 bottom-0 z-20 flex justify-center transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+              sheet ? "translate-y-0" : "translate-y-[calc(100%-3rem)]",
             )}
           >
-            <div className="mx-auto max-w-lg rounded-t-[28px] border border-border bg-bg-elevated/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
+            <div
+              className={cn(
+                "flex w-full max-w-lg flex-col max-h-[min(70dvh,500px)] rounded-t-[28px] border shadow-2xl backdrop-blur-xl transition-colors",
+                params.invert
+                  ? "border-neutral-300/80 bg-white/95 text-neutral-900 shadow-neutral-900/10"
+                  : "border-border bg-bg-elevated/95 text-fg",
+              )}
+            >
               <button
                 type="button"
-                className="flex w-full flex-col items-center pb-2 pt-1 text-fg-muted"
+                className={cn(
+                  "shrink-0 flex w-full flex-col items-center pb-2 pt-2.5 transition-colors border-b",
+                  params.invert
+                    ? "text-neutral-700 hover:text-neutral-950 border-neutral-200"
+                    : "text-fg-muted hover:text-fg border-border/40",
+                )}
                 onClick={() => setSheet((s) => !s)}
                 aria-expanded={sheet}
               >
-                <span className="mb-2 h-1 w-10 rounded-full bg-border-strong" />
-                <span className="flex items-center gap-1 text-xs uppercase tracking-[0.16em]">
+                <span
+                  className={cn(
+                    "mb-1.5 h-1.5 w-12 rounded-full",
+                    params.invert ? "bg-neutral-300" : "bg-border-strong",
+                  )}
+                />
+                <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.16em]">
                   Structure
-                  <ChevronUp className={cn("size-3.5 transition-transform", sheet ? "rotate-0" : "rotate-180")} />
+                  <ChevronUp className={cn("size-3.5 transition-transform duration-200", sheet ? "rotate-0" : "rotate-180")} />
                 </span>
               </button>
 
-              <div className="flex flex-col gap-2.5 pb-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-medium uppercase tracking-[0.14em] text-fg-subtle">
-                    Particle Palette
-                  </span>
-                  <div className="w-36">
-                    <ToggleRow
-                      label="Invert"
-                      icon={<FlipHorizontal2 className="size-3.5" />}
-                      checked={params.invert}
-                      onCheckedChange={(v) => patch({ invert: v })}
-                    />
+              <div className="flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 touch-pan-y">
+                <div className="flex flex-col gap-2.5 pb-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span
+                      className={cn(
+                        "text-xs font-medium uppercase tracking-[0.14em]",
+                        params.invert ? "text-neutral-500" : "text-fg-subtle",
+                      )}
+                    >
+                      Particle Palette
+                    </span>
+                    <div className="w-32">
+                      <ToggleRow
+                        label="Invert"
+                        icon={<FlipHorizontal2 className="size-3.5" />}
+                        checked={params.invert}
+                        onCheckedChange={(v) => patch({ invert: v })}
+                      />
+                    </div>
                   </div>
-                </div>
 
-                <div className="grid grid-cols-3 gap-1 rounded-xl border border-border bg-bg-subtle p-1">
-                  {(
-                    [
-                      ["mono", "Mono (B&W)"],
-                      ["hybrid", "Hybrid (Color + B&W)"],
-                      ["color", "Full Color"],
-                    ] as const
-                  ).map(([mode, label]) => {
-                    const currentMode = params.colorStyle ?? (params.color ? "color" : "mono");
-                    const active = currentMode === mode;
-                    return (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() =>
-                          patch({
-                            colorStyle: mode,
-                            color: mode !== "mono",
-                          })
-                        }
+                  <div
+                    className={cn(
+                      "grid grid-cols-3 gap-1 rounded-xl border p-1",
+                      params.invert
+                        ? "border-neutral-200 bg-neutral-100"
+                        : "border-border bg-bg-subtle",
+                    )}
+                  >
+                    {(
+                      [
+                        ["mono", "Mono", "B&W"],
+                        ["hybrid", "Hybrid", "Color + B&W"],
+                        ["color", "Color", "Full RGB"],
+                      ] as const
+                    ).map(([mode, label, sub]) => {
+                      const currentMode = params.colorStyle ?? (params.color ? "color" : "mono");
+                      const active = currentMode === mode;
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() =>
+                            patch({
+                              colorStyle: mode,
+                              color: mode !== "mono",
+                            })
+                          }
+                          className={cn(
+                            "flex flex-col items-center justify-center rounded-lg py-1.5 px-1 text-center transition-all",
+                            active
+                              ? params.invert
+                                ? "bg-white text-neutral-950 shadow-sm font-semibold border border-neutral-300"
+                                : "bg-bg-elevated text-fg shadow-sm font-semibold border border-border/80"
+                              : params.invert
+                                ? "text-neutral-600 hover:bg-white/60 hover:text-neutral-900"
+                                : "text-fg-muted hover:bg-bg/50 hover:text-fg",
+                          )}
+                        >
+                          <span className="text-xs">{label}</span>
+                          <span
+                            className={cn(
+                              "text-[10px] tracking-tight",
+                              params.invert ? "text-neutral-500" : "text-fg-subtle",
+                            )}
+                          >
+                            {sub}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {(params.colorStyle ?? (params.color ? "color" : "mono")) === "hybrid" && (
+                    <div
+                      className={cn(
+                        "mt-1 rounded-xl border p-2.5",
+                        params.invert
+                          ? "border-neutral-200 bg-neutral-50"
+                          : "border-border/60 bg-bg/60",
+                      )}
+                    >
+                      <Field
+                        label="Hybrid Color Ratio (Derived from Face)"
+                        value={`${Math.round((params.colorMix ?? 0.5) * 100)}% Color · ${Math.round((1 - (params.colorMix ?? 0.5)) * 100)}% B&W`}
+                      >
+                        <Slider
+                          min={0.1}
+                          max={0.9}
+                          step={0.05}
+                          value={[params.colorMix ?? 0.5]}
+                          onValueChange={([v]) => patch({ colorMix: v ?? 0.5 })}
+                        />
+                      </Field>
+                      <p
                         className={cn(
-                          "rounded-lg px-2 py-1.5 text-center text-xs font-medium transition-all",
-                          active
-                            ? "bg-bg-elevated text-fg shadow-sm font-semibold border border-border/80"
-                            : "text-fg-muted hover:bg-bg/50 hover:text-fg",
+                          "mt-1 text-[11px]",
+                          params.invert ? "text-neutral-500" : "text-fg-subtle",
                         )}
                       >
-                        {label}
-                      </button>
-                    );
-                  })}
+                        Interweaves photorealistic colors from the face with silver monochrome particles.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
-                {(params.colorStyle ?? (params.color ? "color" : "mono")) === "hybrid" && (
-                  <div className="mt-1 rounded-xl border border-border/60 bg-bg/60 p-2.5">
-                    <Field
-                      label="Hybrid Color Ratio (Derived from Face)"
-                      value={`${Math.round((params.colorMix ?? 0.5) * 100)}% Color · ${Math.round((1 - (params.colorMix ?? 0.5)) * 100)}% B&W`}
-                    >
-                      <Slider
-                        min={0.1}
-                        max={0.9}
-                        step={0.05}
-                        value={[params.colorMix ?? 0.5]}
-                        onValueChange={([v]) => patch({ colorMix: v ?? 0.5 })}
-                      />
-                    </Field>
-                    <p className="mt-1 text-[11px] text-fg-subtle">
-                      Interweaves photorealistic colors from the face with silver monochrome particles.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <Field label="Particles" value={`${Math.round(params.particles / 1000)}k`}>
+                <Field label="Particles" value={`${Math.round(params.particles / 1000)}k`}>
                 <Slider
                   min={5000}
                   max={100000}
@@ -527,6 +652,7 @@ export function FaceParticlesApp() {
                   checked={params.removeBg}
                   onCheckedChange={(v) => patch({ removeBg: v })}
                 />
+              </div>
               </div>
             </div>
           </div>

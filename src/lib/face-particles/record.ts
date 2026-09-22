@@ -23,14 +23,14 @@ function wait(ms: number): Promise<void> {
 
 export async function recordTimeline(
   engine: ParticleEngine,
-  seconds = 8,
+  seconds = 30,
   onTick?: (label: string) => void,
 ): Promise<Blob> {
   const mime = pickMime();
   if (mime === null) throw new Error("Recording is not supported in this browser.");
   const stream = engine.getCanvasStream(30);
   const recorder = mime
-    ? new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6_000_000 })
+    ? new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8_000_000 })
     : new MediaRecorder(stream);
   const chunks: Blob[] = [];
   recorder.ondataavailable = (e) => {
@@ -45,20 +45,61 @@ export async function recordTimeline(
 
   engine.lockIdleOrbit(true);
   recorder.start(200);
-  onTick?.("Assemble");
+
+  // --- ROUND 1 (15 Seconds) ---
+  // 1. Assemble / Build (3.0s)
+  onTick?.("Round 1/2 · Assemble (1/5)");
   engine.play("build");
-  await wait(1800);
-  onTick?.("Hold");
-  await wait(1400);
-  onTick?.("Sweep");
+  await wait(3000);
+
+  // 2. Ripple (3.0s)
+  onTick?.("Round 1/2 · Ripple Wave (2/5)");
+  engine.play("ripple");
+  await wait(3000);
+
+  // 3. Wind (3.0s)
+  onTick?.("Round 1/2 · Wind Stream (3/5)");
   engine.play("wind");
-  await wait(1600);
-  onTick?.("Scatter");
+  await wait(3000);
+
+  // 4. Vortex (3.0s)
+  onTick?.("Round 1/2 · Vortex Spiral (4/5)");
+  engine.play("vortex");
+  await wait(3000);
+
+  // 5. Break / Disassemble (3.0s)
+  onTick?.("Round 1/2 · Particle Break (5/5)");
   engine.play("disassemble");
-  await wait(1400);
-  onTick?.("Return");
+  await wait(3000);
+
+  // --- ROUND 2 (15 Seconds) ---
+  // 6. Re-assemble (3.0s)
+  onTick?.("Round 2/2 · Assemble Face (1/5)");
   engine.play("assemble");
-  await wait(Math.max(400, seconds * 1000 - 1800 - 1400 - 1600 - 1400));
+  await wait(3000);
+
+  // 7. Ripple (3.0s)
+  onTick?.("Round 2/2 · Contour Ripple (2/5)");
+  engine.play("ripple");
+  await wait(3000);
+
+  // 8. Wind (3.0s)
+  onTick?.("Round 2/2 · Cosmic Wind (3/5)");
+  engine.play("wind");
+  await wait(3000);
+
+  // 9. Vortex (3.0s)
+  onTick?.("Round 2/2 · Galactic Vortex (4/5)");
+  engine.play("vortex");
+  await wait(3000);
+
+  // 10. Break & Grand Finale (3.0s)
+  onTick?.("Round 2/2 · Grand Finale (5/5)");
+  engine.play("disassemble");
+  await wait(1600);
+  engine.play("assemble");
+  await wait(1400);
+
   recorder.stop();
   engine.lockIdleOrbit(false);
   stream.getTracks().forEach((t) => t.stop());

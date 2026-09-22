@@ -116,7 +116,10 @@ void main() {
   float size = uSize * uDpr * depthScale;
   gl_PointSize = clamp(size, uPointRange.x, uPointRange.y);
   float tone = aTone;
-  vBright = (0.58 + 0.42 * tone) * (0.82 + 0.18 * depthScale);
+  // In invert mode, ensure dark features have solid ink opacity (no hazy fading)
+  vBright = uInvert > 0.5
+    ? (0.76 + 0.24 * tone) * (0.86 + 0.14 * depthScale)
+    : (0.58 + 0.42 * tone) * (0.82 + 0.18 * depthScale);
 
   // 0.0 = Monochrome (all B&W/silver), 1.0 = Full Color (source image), 2.0 = Hybrid (mixed color + B&W)
   vec3 col;
@@ -130,8 +133,20 @@ void main() {
   }
 
   if (uInvert > 0.5) {
-    float activeCol = step(0.5, uColorMode);
-    col = mix(vec3(0.12, 0.11, 0.10), col * 0.35, activeCol);
+    // For inverted mode on fine-art paper:
+    // - Monochrome: Rich sumi/carbon black ink
+    // - Full Color: High-saturation print pigment derived from source
+    // - Hybrid: Interwoven carbon ink + source color pigment
+    vec3 inkBlack = vec3(0.04, 0.04, 0.05);
+    vec3 richColor = clamp(pow(aColor, vec3(1.1)) * 0.95, 0.0, 1.0);
+    if (uColorMode < 0.5) {
+      col = inkBlack;
+    } else if (uColorMode < 1.5) {
+      col = richColor;
+    } else {
+      float isCol = step(aSeed, clamp(uColorMix, 0.05, 0.95));
+      col = mix(inkBlack, richColor, isCol);
+    }
   }
   vColor = col;
 }
@@ -146,7 +161,7 @@ void main() {
   vec2 p = gl_PointCoord * 2.0 - 1.0;
   float r2 = dot(p, p);
   if (r2 > 1.0) discard;
-  float a = exp(-r2 * 2.85) * vBright;
+  float a = exp(-r2 * 2.6) * vBright;
   fragColor = vec4(vColor * a, a);
 }
 `;

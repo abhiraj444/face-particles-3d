@@ -150,6 +150,23 @@ export async function analyze(source: HTMLCanvasElement): Promise<VisionResult> 
   const sourceW = source.width;
   const sourceH = source.height;
 
+  // Downscale source for ML inference if larger than 512px for high speed and mobile smoothness
+  let inferSource: CanvasImageSource = source;
+  const maxDim = Math.max(sourceW, sourceH);
+  if (maxDim > 512) {
+    const scale = 512 / maxDim;
+    const iw = Math.max(1, Math.round(sourceW * scale));
+    const ih = Math.max(1, Math.round(sourceH * scale));
+    const c = document.createElement("canvas");
+    c.width = iw;
+    c.height = ih;
+    const ctx = c.getContext("2d");
+    if (ctx) {
+      ctx.drawImage(source, 0, 0, iw, ih);
+      inferSource = c;
+    }
+  }
+
   const [landmarker, segmenter] = await Promise.all([
     withTimeout(initLandmarker(), 30000, "Landmarker init").catch(() => null),
     withTimeout(initSegmenter(), 30000, "Segmenter init").catch(() => null),
@@ -161,7 +178,7 @@ export async function analyze(source: HTMLCanvasElement): Promise<VisionResult> 
 
   if (landmarker) {
     try {
-      const result = landmarker.detect(source);
+      const result = landmarker.detect(inferSource);
       if (result.faceLandmarks && result.faceLandmarks.length > 0) {
         hasFace = true;
         // If multiple faces, select the one with the largest bounding box area
@@ -202,7 +219,7 @@ export async function analyze(source: HTMLCanvasElement): Promise<VisionResult> 
 
   if (segmenter) {
     try {
-      const segResult = segmenter.segment(source);
+      const segResult = segmenter.segment(inferSource);
       if (segResult.categoryMask) {
         const mask = segResult.categoryMask;
         classW = mask.width;

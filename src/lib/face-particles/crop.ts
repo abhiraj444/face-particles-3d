@@ -86,20 +86,22 @@ export function headCrop(
     iod = Math.hypot(dx, dy) || iod;
     if (params.straighten) angle = Math.atan2(dy, dx);
     const nose = lm[IDX.noseTip];
-    faceCx = nose ? nose.x * srcW : ((r.x + l.x) / 2) * srcW;
-    faceCy = nose ? nose.y * srcH : ((r.y + l.y) / 2) * srcH;
+    const eyeMidX = ((r.x + l.x) / 2) * srcW;
+    const eyeMidY = ((r.y + l.y) / 2) * srcH;
+    faceCx = eyeMidX;
+    faceCy = nose ? (nose.y * srcH + eyeMidY) * 0.5 : eyeMidY + iod * 0.35;
     if (lm[IDX.chin]) {
       chinY = lm[IDX.chin]!.y * srcH;
     }
   }
 
-  const bounds = headBounds(vision, srcW, srcH, chinY + srcH * 0.12);
+  const bounds = headBounds(vision, srcW, srcH, chinY + srcH * 0.15);
   let bw: number;
   let bh: number;
   let bx: number;
   let by: number;
   if (bounds) {
-    const pad = 0.12;
+    const pad = 0.22;
     bw = (bounds.maxX - bounds.minX) * (1 + pad * 2);
     bh = (bounds.maxY - bounds.minY) * (1 + pad * 2);
     bx = (bounds.minX + bounds.maxX) / 2;
@@ -118,13 +120,10 @@ export function headCrop(
   if (cropW / cropH > targetAspect) cropH = cropW / targetAspect;
   else cropW = cropH * targetAspect;
 
-  // Place face center near 45% of the portrait height and 50% width
+  // Center face coordinate at 50% width and 50% height for a perfectly centered 3D portrait
   if (lm && lm.length > IDX.leftEyeOuter) {
     bx = faceCx;
-    by = faceCy + cropH * (0.5 - 0.45);
-  } else {
-    const desiredFaceY = by;
-    by = desiredFaceY + cropH * (0.45 - 0.5);
+    by = faceCy;
   }
 
   ctx.save();

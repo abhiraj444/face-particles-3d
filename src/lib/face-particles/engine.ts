@@ -498,11 +498,13 @@ export class ParticleEngine {
     const idleP = this.idleOrbit && !this.userOrbit ? Math.cos(this.time * 0.13) * 0.03 : 0;
     const yaw = clamp(this.yaw + this.gyroYaw + idleY, -ORBIT_LIMIT, ORBIT_LIMIT);
     const pitch = clamp(this.pitch + this.gyroPitch + idleP, -ORBIT_LIMIT, ORBIT_LIMIT);
-    const dist = 2.45;
+    // On mobile portrait screens (aspect < 1), scale distance so the 3D face fits fully and stays centered
+    const baseDist = 2.45;
+    const dist = aspect < 1.0 ? baseDist * (0.85 / Math.max(0.42, aspect)) : baseDist;
     this.tmpEye[0] = Math.sin(yaw) * Math.cos(pitch) * dist;
     this.tmpEye[1] = Math.sin(pitch) * dist;
     this.tmpEye[2] = Math.cos(yaw) * Math.cos(pitch) * dist;
-    lookAt(this.view, this.tmpEye, [0, 0.02, 0], [0, 1, 0]);
+    lookAt(this.view, this.tmpEye, [0, 0, 0], [0, 1, 0]);
     multiply(this.viewProj, this.proj, this.view);
   }
 
@@ -511,13 +513,12 @@ export class ParticleEngine {
     if (!gl || !this.renderProg || !this.vaoRender) return;
     this.resize();
     this.camera();
-    if (this.invert) gl.clearColor(0.91, 0.887, 0.84, 1);
+    if (this.invert) gl.clearColor(0.98, 0.973, 0.96, 1);
     else gl.clearColor(0.027, 0.027, 0.031, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.disable(gl.DEPTH_TEST);
     gl.enable(gl.BLEND);
-    if (this.invert) gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    else gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(this.renderProg);
     gl.uniformMatrix4fv(this.uRender.uViewProj, false, this.viewProj);
     const n = Math.max(1000, this.drawCount);
