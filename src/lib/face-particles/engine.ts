@@ -481,7 +481,7 @@ export class ParticleEngine {
     const canvas = this.canvas;
     const gl = this.gl;
     if (!gl) return;
-    const dpr = Math.min(2, window.devicePixelRatio || 1) * this.renderScale;
+    const dpr = Math.min(2.5, typeof window !== "undefined" ? (window.devicePixelRatio || 1) : 1);
     const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
     const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
     if (canvas.width !== w || canvas.height !== h) {
@@ -494,14 +494,17 @@ export class ParticleEngine {
   private camera(): void {
     const gl = this.gl!;
     const aspect = gl.drawingBufferWidth / Math.max(1, gl.drawingBufferHeight);
-    perspective(this.proj, (32 * Math.PI) / 180, aspect, 0.1, 20);
+    const baseFov = (32 * Math.PI) / 180;
+    // On tall mobile screens (aspect < 1.0), adapt field of view so portrait width fills the display naturally without moving camera away
+    const fov = aspect < 1.0
+      ? 2 * Math.atan(Math.tan(baseFov / 2) * (0.80 / Math.max(0.44, aspect)))
+      : baseFov;
+    perspective(this.proj, fov, aspect, 0.1, 20);
     const idleY = this.idleOrbit && !this.userOrbit ? Math.sin(this.time * 0.18) * 0.1 : 0;
     const idleP = this.idleOrbit && !this.userOrbit ? Math.cos(this.time * 0.13) * 0.03 : 0;
     const yaw = clamp(this.yaw + this.gyroYaw + idleY, -ORBIT_LIMIT, ORBIT_LIMIT);
     const pitch = clamp(this.pitch + this.gyroPitch + idleP, -ORBIT_LIMIT, ORBIT_LIMIT);
-    // On mobile portrait screens (aspect < 1), scale distance so the 3D face fits fully and stays centered
-    const baseDist = 2.45;
-    const dist = aspect < 1.0 ? baseDist * (0.85 / Math.max(0.42, aspect)) : baseDist;
+    const dist = 2.45;
     this.tmpEye[0] = Math.sin(yaw) * Math.cos(pitch) * dist;
     this.tmpEye[1] = Math.sin(pitch) * dist;
     this.tmpEye[2] = Math.cos(yaw) * Math.cos(pitch) * dist;
@@ -524,7 +527,7 @@ export class ParticleEngine {
     gl.uniformMatrix4fv(this.uRender.uViewProj, false, this.viewProj);
     const n = Math.max(1000, this.drawCount);
     const size = this.size * Math.sqrt(POINT_SIZE_REF_N / n);
-    const dpr = Math.min(2, window.devicePixelRatio || 1) * this.renderScale;
+    const dpr = Math.min(2.5, typeof window !== "undefined" ? (window.devicePixelRatio || 1) : 1);
     gl.uniform1f(this.uRender.uSize, size);
     gl.uniform1f(this.uRender.uDpr, dpr);
     gl.uniform2f(this.uRender.uPointRange, this.pointRange[0], this.pointRange[1]);
@@ -538,18 +541,8 @@ export class ParticleEngine {
     gl.bindVertexArray(null);
   }
 
-  private adapt(dt: number): void {
-    this.frameTimes.push(dt);
-    if (this.frameTimes.length < 60) return;
-    const avg = this.frameTimes.reduce((a, b) => a + b, 0) / this.frameTimes.length;
-    this.frameTimes.length = 0;
-    if (avg > 0.025 && this.renderScale > 0.65) {
-      this.renderScale = Math.max(0.65, this.renderScale * 0.9);
-    } else if (avg > 0.025 && this.drawCount > 25000) {
-      this.drawCount = Math.max(25000, (this.drawCount * 0.88) | 0);
-    } else if (avg < 0.015 && this.renderScale < 1) {
-      this.renderScale = Math.min(1, this.renderScale * 1.05);
-    }
+  private adapt(_dt: number): void {
+    // Keep quality intact on all devices
   }
 
   worldFromClient(clientX: number, clientY: number): [number, number] {

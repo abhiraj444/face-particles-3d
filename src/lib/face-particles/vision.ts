@@ -149,23 +149,7 @@ export async function preloadVision(): Promise<void> {
 export async function analyze(source: HTMLCanvasElement): Promise<VisionResult> {
   const sourceW = source.width;
   const sourceH = source.height;
-
-  // Downscale source for ML inference if larger than 512px for high speed and mobile smoothness
-  let inferSource: CanvasImageSource = source;
-  const maxDim = Math.max(sourceW, sourceH);
-  if (maxDim > 512) {
-    const scale = 512 / maxDim;
-    const iw = Math.max(1, Math.round(sourceW * scale));
-    const ih = Math.max(1, Math.round(sourceH * scale));
-    const c = document.createElement("canvas");
-    c.width = iw;
-    c.height = ih;
-    const ctx = c.getContext("2d");
-    if (ctx) {
-      ctx.drawImage(source, 0, 0, iw, ih);
-      inferSource = c;
-    }
-  }
+  const inferSource: CanvasImageSource = source;
 
   const [landmarker, segmenter] = await Promise.all([
     withTimeout(initLandmarker(), 30000, "Landmarker init").catch(() => null),

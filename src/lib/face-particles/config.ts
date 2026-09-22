@@ -45,19 +45,10 @@ const HASH_KEYS: (keyof Params)[] = [
 ];
 
 export function defaultParticleCount(): number {
-  if (typeof navigator === "undefined") return N_DEFAULT;
-  const mem = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
-  if (mem && mem <= 4) return 28_000;
-  if (typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches) {
-    return 40_000;
-  }
   return N_DEFAULT;
 }
 
 export function workingSize(): { w: number; h: number } {
-  if (typeof navigator === "undefined") return { w: WORKING_W, h: WORKING_H };
-  const mem = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
-  if (mem && mem <= 4) return { w: 576, h: 768 };
   return { w: WORKING_W, h: WORKING_H };
 }
 
