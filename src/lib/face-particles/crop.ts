@@ -174,27 +174,31 @@ export function headCrop(
     }
   }
 
-  // Facial core protection envelope
-  let faceEnvCx = outW * 0.5;
-  let faceEnvCy = outH * 0.48;
-  let faceEnvRx = outW * 0.28;
-  let faceEnvRy = outH * 0.32;
-  if (landmarks && landmarks[IDX.forehead] && landmarks[IDX.chin]) {
-    const top = landmarks[IDX.forehead]!;
+  // Tight inner beard/mouth zone to protect dark mustaches without touching background wall
+  let beardMinX = 0, beardMaxX = 0, beardMinY = 0, beardMaxY = 0;
+  let hasBeardZone = false;
+  if (landmarks && landmarks[IDX.noseTip] && landmarks[IDX.chin]) {
+    const nose = landmarks[IDX.noseTip]!;
     const chin = landmarks[IDX.chin]!;
-    faceEnvCx = (top.x + chin.x) * 0.5;
-    faceEnvCy = (top.y + chin.y) * 0.5;
-    faceEnvRy = Math.abs(chin.y - top.y) * 0.55;
-    faceEnvRx = Math.max(iod * 0.95, faceEnvRy * 0.72);
+    beardMinX = nose.x - iod * 0.55;
+    beardMaxX = nose.x + iod * 0.55;
+    beardMinY = nose.y - iod * 0.1;
+    beardMaxY = chin.y + iod * 0.15;
+    hasBeardZone = true;
   }
+
+  const cosA = Math.cos(angle);
+  const sinA = Math.sin(angle);
+  const scale = outW / cropW;
 
   if (vision.classes && vision.classW > 0) {
     for (let y = 0; y < outH; y++) {
       for (let x = 0; x < outW; x++) {
-        const lx = (x - outW / 2) / sx;
-        const ly = (y - outH / 2) / sy;
-        const srcX = lx * Math.cos(angle) - ly * Math.sin(angle) + bx;
-        const srcY = lx * Math.sin(angle) + ly * Math.cos(angle) + by;
+        // Exact inverse transformation from crop canvas to source image coordinates
+        const x0 = (x - outW / 2) / scale;
+        const y0 = (y - outH / 2) / scale;
+        const srcX = x0 * cosA - y0 * sinA + bx;
+        const srcY = x0 * sinA + y0 * cosA + by;
         const u = srcX / srcW;
         const v = srcY / srcH;
         const c =
@@ -203,20 +207,18 @@ export function headCrop(
             : sampleClass(vision.classes, vision.classW, vision.classH, u, v);
         const i = y * outW + x;
 
-        // Guaranteed facial core: prevents ML model from cutting out dark beards, skin shadows, or features
-        const efx = (x - faceEnvCx) / Math.max(1, faceEnvRx);
-        const efy = (y - faceEnvCy) / Math.max(1, faceEnvRy);
-        const inFaceEnv = efx * efx + efy * efy <= 1.0;
-
+        const inBeardZone = hasBeardZone && x >= beardMinX && x <= beardMaxX && y >= beardMinY && y <= beardMaxY;
         const isHair = c === CLASS_HAIR;
-        const isFace = c === CLASS_FACE || (landmarks ? inFaceEnv : false);
+        // Strictly true face, plus inner mustache/beard zone if dark shadow was classified as 0
+        const isFace = c === CLASS_FACE || (inBeardZone && (c === 0 || c === CLASS_BODY));
         const isBody = c === CLASS_BODY;
         const isOthers = c === CLASS_OTHERS; // Glasses and accessories!
-        const isHat = c === CLASS_CLOTHES && ly < 0; // Caps / hats above face center
-        const neck = isBody && y > chinCropY - 8 && y < chinCropY + outH * 0.16;
+        const isHat = c === CLASS_CLOTHES && y0 < -outH * 0.2; // Caps / hats strictly above head
+        const neck = isBody && y > chinCropY - 4 && y < chinCropY + outH * 0.12;
+
         hairSkin[i] = isHair || isFace || isOthers || isHat || neck ? 1 : 0;
         faceSkin[i] = isFace || isOthers ? 1 : 0;
-        mask[i] = isHair || isFace || isOthers || isHat ? 1 : neck ? clamp(1 - (y - chinCropY) / (outH * 0.14), 0, 1) : 0;
+        mask[i] = isHair || isFace || isOthers || isHat ? 1 : neck ? clamp(1 - (y - chinCropY) / (outH * 0.10), 0, 1) : 0;
       }
     }
   } else {

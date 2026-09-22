@@ -177,8 +177,8 @@ export function buildWeights(crop: CropResult, params: Params): WeightMaps {
   for (let i = 0; i < edges.length; i++) edges[i] = clamp(edges[i]! * edgeNorm, 0, 1);
 
   const L = featureMap(crop);
-  const dil = dilate(mask, w, h, 3);
-  const maskSigma = Math.max(1.2, Math.min(w, h) * 0.02 * (0.35 + params.softness));
+  const dil = dilate(mask, w, h, 1);
+  const maskSigma = Math.max(1.0, Math.min(w, h) * 0.006 * (0.5 + params.softness));
   const M = blurChannel(dil, w, h, maskSigma);
 
   const weight = new Float32Array(w * h);
@@ -191,7 +191,11 @@ export function buildWeights(crop: CropResult, params: Params): WeightMaps {
   for (let i = 0; i < weight.length; i++) {
     let wv = Math.pow(Math.max(tone[i]!, 1e-5), gamma) * (1 + a * edges[i]!) * (1 + b * L[i]!);
     wv = Math.max(wv, subjFloor * (hairSkin[i] ?? 0));
-    if (params.removeBg) wv *= M[i]!;
+    if (params.removeBg) {
+      const m = M[i]!;
+      // Clean background cutoff: completely erases particles from room/wall background
+      wv = m < 0.04 ? 0 : wv * m;
+    }
     weight[i] = wv;
   }
 
