@@ -181,20 +181,16 @@ export function buildWeights(crop: CropResult, params: Params): WeightMaps {
   const maskSigma = Math.max(1.2, Math.min(w, h) * 0.02 * (0.35 + params.softness));
   const M = blurChannel(dil, w, h, maskSigma);
 
-  // Smooth skin mask to eliminate any harsh edge cutoffs at the forehead, glasses, or temples
-  const smoothSkin = blurChannel(faceSkin, w, h, Math.max(8, Math.round(w * 0.035)));
-
   const weight = new Float32Array(w * h);
   const gamma = params.contrast;
   const a = params.detail;
   const b = params.feature;
   const floor = params.floor;
-  // In invert mode (white background/paper), keep skin luminous with delicate floor
-  const skinFloor = params.invert ? Math.min(floor, 0.05) : Math.max(floor, 0.20);
+  // Floor applies uniformly across the subject (hair, face, accessories) to prevent any boundary seam
+  const subjFloor = params.invert ? Math.min(floor, 0.05) : Math.max(floor, 0.16);
   for (let i = 0; i < weight.length; i++) {
     let wv = Math.pow(Math.max(tone[i]!, 1e-5), gamma) * (1 + a * edges[i]!) * (1 + b * L[i]!);
-    const effFloor = floor + (skinFloor - floor) * smoothSkin[i]!;
-    wv = Math.max(wv, effFloor * (hairSkin[i] ?? 0));
+    wv = Math.max(wv, subjFloor * (hairSkin[i] ?? 0));
     if (params.removeBg) wv *= M[i]!;
     weight[i] = wv;
   }

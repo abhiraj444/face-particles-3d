@@ -12,13 +12,15 @@ export function meshDomeDepth(crop: CropResult): Float32Array {
   const cx = w * 0.5;
   let cy = h * 0.45;
   let rx = w * 0.38;
-  let ry = h * 0.42;
+  let ry = h * 0.48;
   if (landmarks && landmarks[IDX.forehead] && landmarks[IDX.chin]) {
     const top = landmarks[IDX.forehead]!;
     const chin = landmarks[IDX.chin]!;
-    cy = (top.y + chin.y) * 0.5;
-    ry = Math.abs(chin.y - top.y) * 0.72;
-    rx = Math.max(iod * 1.35, w * 0.28);
+    // Skull crown extends naturally above the forehead landmark
+    const crownY = Math.max(0.06 * h, top.y - iod * 1.35);
+    cy = (chin.y + crownY) * 0.5;
+    ry = Math.max((chin.y - crownY) * 0.62, h * 0.44);
+    rx = Math.max(iod * 1.6, w * 0.36);
   }
 
   const radius = Math.max(6, iod * 0.22);
@@ -56,8 +58,8 @@ export function meshDomeDepth(crop: CropResult): Float32Array {
       if (weight[i] > 1e-5) mesh[i] /= weight[i];
     }
     // Diffuse both the mesh and weight smoothly so facial relief flows naturally across cheeks, glasses, and temples
-    boxBlurInPlace(mesh, w, h, Math.max(3, Math.round(iod * 0.1)));
-    boxBlurInPlace(weight, w, h, Math.max(4, Math.round(iod * 0.16)));
+    boxBlurInPlace(mesh, w, h, Math.max(6, Math.round(iod * 0.16)));
+    boxBlurInPlace(weight, w, h, Math.max(8, Math.round(iod * 0.25)));
   }
 
   for (let y = 0; y < h; y++) {
@@ -66,12 +68,14 @@ export function meshDomeDepth(crop: CropResult): Float32Array {
       const nx = (x - cx) / rx;
       const ny = (y - cy) / ry;
       const d = nx * nx + ny * ny;
-      const dome = d < 1 ? Math.sqrt(Math.max(0, 1 - d)) : 0;
+      const dist = Math.sqrt(d);
+      // Smooth cosine dome: derivative is 0 at both center and outer boundary, eliminating depth cliffs
+      const dome = dist < 1.0 ? 0.5 * (1.0 + Math.cos(dist * Math.PI)) : 0.0;
       const m = mask[i] ?? 0;
       const meshV = mesh[i] ?? 0;
       const wV = weight[i] ?? 0;
       // Smooth continuous confidence factor: high on face and glasses, seamlessly blending with the skull dome
-      const confidence = clamp(wV * 1.2, 0, 0.85);
+      const confidence = clamp(wV * 1.0, 0, 0.85);
       const blended = meshV * confidence + dome * (1 - confidence);
       // Unify depth across face, glasses, and hair with gentle silhouette shaping
       depth[i] = blended * (0.80 + 0.20 * m);
