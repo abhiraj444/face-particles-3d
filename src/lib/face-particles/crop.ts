@@ -6,6 +6,8 @@ import { clamp } from "./math";
 const CLASS_HAIR = 1;
 const CLASS_BODY = 2;
 const CLASS_FACE = 3;
+const CLASS_CLOTHES = 4;
+const CLASS_OTHERS = 5;
 
 function sampleClass(
   classes: Uint8Array | null,
@@ -30,9 +32,10 @@ function headBounds(vision: VisionResult, srcW: number, srcH: number, chinLimitY
     for (let y = 0; y < classH; y++) {
       for (let x = 0; x < classW; x++) {
         const c = classes[y * classW + x] ?? 0;
-        const isHairOrFace = c === CLASS_HAIR || c === CLASS_FACE;
+        // Include hair, face, and accessories/glasses (class 5)
+        const isHeadElement = c === CLASS_HAIR || c === CLASS_FACE || c === CLASS_OTHERS;
         const isNeckSlice = c === CLASS_BODY && y <= maxNeckY;
-        if (isHairOrFace || isNeckSlice) {
+        if (isHeadElement || isNeckSlice) {
           const px = (x / classW) * srcW;
           const py = (y / classH) * srcH;
           minX = Math.min(minX, px);
@@ -74,7 +77,7 @@ export function headCrop(
   let angle = 0;
   let iod = Math.min(srcW, srcH) * 0.18;
   let faceCx = srcW * 0.5;
-  let faceCy = srcH * 0.42;
+  let faceCy = srcH * 0.45;
 
   const lm = vision.landmarks;
   let chinY = srcH * 0.72;
@@ -96,35 +99,31 @@ export function headCrop(
   }
 
   const bounds = headBounds(vision, srcW, srcH, chinY + srcH * 0.15);
-  let bw: number;
-  let bh: number;
-  let bx: number;
-  let by: number;
+  let cropW: number;
+  let cropH: number;
+  const bx: number = faceCx;
+  const by: number = faceCy;
+
+  // Ensure distance from faceCy up to bounds.minY (top of hair/crown) and down to chin is completely preserved
+  const pad = 0.28;
   if (bounds) {
-    const pad = 0.22;
-    bw = (bounds.maxX - bounds.minX) * (1 + pad * 2);
-    bh = (bounds.maxY - bounds.minY) * (1 + pad * 2);
-    bx = (bounds.minX + bounds.maxX) / 2;
-    by = (bounds.minY + bounds.maxY) / 2;
+    const distUp = Math.max(faceCy - bounds.minY, iod * 2.2);
+    const distDown = Math.max(bounds.maxY - faceCy, iod * 2.2);
+    const halfH = Math.max(distUp, distDown) * (1 + pad);
+    const distLeft = Math.max(faceCx - bounds.minX, iod * 1.8);
+    const distRight = Math.max(bounds.maxX - faceCx, iod * 1.8);
+    const halfW = Math.max(distLeft, distRight) * (1 + pad);
+    cropH = halfH * 2;
+    cropW = halfW * 2;
   } else {
-    const side = Math.min(srcW, srcH) * 0.78;
-    bw = side;
-    bh = side * (4 / 3);
-    bx = srcW / 2;
-    by = srcH / 2;
+    const side = Math.min(srcW, srcH) * 0.85;
+    cropW = side;
+    cropH = side * (4 / 3);
   }
 
   const targetAspect = outW / outH;
-  let cropW = bw;
-  let cropH = bh;
   if (cropW / cropH > targetAspect) cropH = cropW / targetAspect;
   else cropW = cropH * targetAspect;
-
-  // Center face coordinate at 50% width and 50% height for a perfectly centered 3D portrait
-  if (lm && lm.length > IDX.leftEyeOuter) {
-    bx = faceCx;
-    by = faceCy;
-  }
 
   ctx.save();
   ctx.fillStyle = "#050506";
@@ -177,10 +176,11 @@ export function headCrop(
         const isHair = c === CLASS_HAIR;
         const isFace = c === CLASS_FACE;
         const isBody = c === CLASS_BODY;
+        const isOthers = c === CLASS_OTHERS; // Glasses and accessories!
         const neck = isBody && y > chinCropY - 8 && y < chinCropY + outH * 0.16;
-        hairSkin[i] = isHair || isFace || neck ? 1 : 0;
-        faceSkin[i] = isFace ? 1 : 0;
-        mask[i] = isHair || isFace ? 1 : neck ? clamp(1 - (y - chinCropY) / (outH * 0.14), 0, 1) : 0;
+        hairSkin[i] = isHair || isFace || isOthers || neck ? 1 : 0;
+        faceSkin[i] = isFace || isOthers ? 1 : 0;
+        mask[i] = isHair || isFace || isOthers ? 1 : neck ? clamp(1 - (y - chinCropY) / (outH * 0.14), 0, 1) : 0;
       }
     }
   } else {

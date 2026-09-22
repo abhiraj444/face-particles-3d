@@ -384,6 +384,7 @@ export class ParticleEngine {
   }
 
   snapshot(): Promise<Blob> {
+    this.render();
     return new Promise((resolve, reject) => {
       this.canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("snapshot failed"))), "image/png");
     });
@@ -513,7 +514,7 @@ export class ParticleEngine {
     if (!gl || !this.renderProg || !this.vaoRender) return;
     this.resize();
     this.camera();
-    if (this.invert) gl.clearColor(0.98, 0.973, 0.96, 1);
+    if (this.invert) gl.clearColor(1.0, 1.0, 1.0, 1.0);
     else gl.clearColor(0.027, 0.027, 0.031, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.disable(gl.DEPTH_TEST);

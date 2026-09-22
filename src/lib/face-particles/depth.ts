@@ -55,8 +55,9 @@ export function meshDomeDepth(crop: CropResult): Float32Array {
     for (let i = 0; i < mesh.length; i++) {
       if (weight[i] > 1e-5) mesh[i] /= weight[i];
     }
-    // Diffuse the splat so cheeks fill in.
-    boxBlurInPlace(mesh, w, h, Math.max(2, Math.round(iod * 0.06)));
+    // Diffuse both the mesh and weight smoothly so facial relief flows naturally across cheeks, glasses, and temples
+    boxBlurInPlace(mesh, w, h, Math.max(3, Math.round(iod * 0.1)));
+    boxBlurInPlace(weight, w, h, Math.max(4, Math.round(iod * 0.16)));
   }
 
   for (let y = 0; y < h; y++) {
@@ -67,11 +68,13 @@ export function meshDomeDepth(crop: CropResult): Float32Array {
       const d = nx * nx + ny * ny;
       const dome = d < 1 ? Math.sqrt(Math.max(0, 1 - d)) : 0;
       const m = mask[i] ?? 0;
-      const meshV = mesh[i];
-      const hasMesh = meshV > 0.01;
-      const seam = hasMesh ? 0.72 : 0;
-      const blended = meshV * seam + dome * (1 - seam);
-      depth[i] = blended * (0.35 + 0.65 * m);
+      const meshV = mesh[i] ?? 0;
+      const wV = weight[i] ?? 0;
+      // Smooth continuous confidence factor: high on face and glasses, seamlessly blending with the skull dome
+      const confidence = clamp(wV * 1.2, 0, 0.85);
+      const blended = meshV * confidence + dome * (1 - confidence);
+      // Unify depth across face, glasses, and hair with gentle silhouette shaping
+      depth[i] = blended * (0.80 + 0.20 * m);
     }
   }
   return depth;

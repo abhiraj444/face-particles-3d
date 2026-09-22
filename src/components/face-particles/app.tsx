@@ -8,6 +8,7 @@ import {
   FlipHorizontal2,
   ImagePlus,
   Loader2,
+  Printer,
   RotateCcw,
   ScanFace,
   Upload,
@@ -214,7 +215,8 @@ export function FaceParticlesApp() {
     if (!engine) return;
     try {
       const blob = await engine.snapshot();
-      downloadBlob(blob, "face-particles.png");
+      const filename = params.invert ? "face-particles-print.png" : "face-particles.png";
+      downloadBlob(blob, filename);
     } catch {
       setError("Could not save a still.");
     }
@@ -224,7 +226,7 @@ export function FaceParticlesApp() {
     <main
       className={cn(
         "relative h-dvh w-full overflow-hidden transition-colors duration-300",
-        params.invert ? "bg-[#faf8f5] text-neutral-900" : "bg-bg text-fg",
+        params.invert ? "bg-white text-neutral-900" : "bg-bg text-fg",
       )}
     >
       <canvas
@@ -312,6 +314,8 @@ export function FaceParticlesApp() {
             variant="secondary"
             size="icon"
             aria-label="Save still"
+            title={params.invert ? "Export print-ready artwork (PNG)" : "Save still image (PNG)"}
+            disabled={!hasPortrait}
             onClick={() => void onSaveStill()}
             className={
               params.invert
@@ -320,6 +324,21 @@ export function FaceParticlesApp() {
             }
           >
             <Download className="size-5" />
+          </Button>
+          <Button
+            variant="secondary"
+            size="icon"
+            aria-label="Print portrait"
+            title="Print particle portrait on paper"
+            disabled={!hasPortrait}
+            onClick={() => window.print()}
+            className={
+              params.invert
+                ? "border-neutral-300 bg-white/85 text-neutral-900 shadow-sm hover:bg-white backdrop-blur-md"
+                : ""
+            }
+          >
+            <Printer className="size-5" />
           </Button>
           <Button
             variant="primary"
@@ -480,6 +499,7 @@ export function FaceParticlesApp() {
                         icon={<FlipHorizontal2 className="size-3.5" />}
                         checked={params.invert}
                         onCheckedChange={(v) => patch({ invert: v })}
+                        invert={params.invert}
                       />
                     </div>
                   </div>
@@ -548,6 +568,7 @@ export function FaceParticlesApp() {
                       <Field
                         label="Hybrid Color Ratio (Derived from Face)"
                         value={`${Math.round((params.colorMix ?? 0.5) * 100)}% Color · ${Math.round((1 - (params.colorMix ?? 0.5)) * 100)}% B&W`}
+                        invert={params.invert}
                       >
                         <Slider
                           min={0.1}
@@ -555,6 +576,7 @@ export function FaceParticlesApp() {
                           step={0.05}
                           value={[params.colorMix ?? 0.5]}
                           onValueChange={([v]) => patch({ colorMix: v ?? 0.5 })}
+                          invert={params.invert}
                         />
                       </Field>
                       <p
@@ -569,90 +591,100 @@ export function FaceParticlesApp() {
                   )}
                 </div>
 
-                <Field label="Particles" value={`${Math.round(params.particles / 1000)}k`}>
-                <Slider
-                  min={5000}
-                  max={100000}
-                  step={1000}
-                  value={[params.particles]}
-                  onValueChange={([v]) => patch({ particles: v ?? params.particles })}
-                />
-              </Field>
-              <Field label="Size" value={params.size.toFixed(1)}>
-                <Slider
-                  min={0.8}
-                  max={4}
-                  step={0.1}
-                  value={[params.size]}
-                  onValueChange={([v]) => patch({ size: v ?? params.size })}
-                />
-              </Field>
-              <Field label="Contrast" value={params.contrast.toFixed(2)}>
-                <Slider
-                  min={0.6}
-                  max={2}
-                  step={0.05}
-                  value={[params.contrast]}
-                  onValueChange={([v]) => patch({ contrast: v ?? params.contrast })}
-                />
-              </Field>
-              <Field label="Detail" value={params.detail.toFixed(2)}>
-                <Slider
-                  min={0}
-                  max={2}
-                  step={0.05}
-                  value={[params.detail]}
-                  onValueChange={([v]) => patch({ detail: v ?? params.detail })}
-                />
-              </Field>
-              <Field label="Features" value={params.feature.toFixed(2)}>
-                <Slider
-                  min={0}
-                  max={1.5}
-                  step={0.05}
-                  value={[params.feature]}
-                  onValueChange={([v]) => patch({ feature: v ?? params.feature })}
-                />
-              </Field>
-              <Field label="Shadow lift" value={params.floor.toFixed(2)}>
-                <Slider
-                  min={0}
-                  max={0.3}
-                  step={0.01}
-                  value={[params.floor]}
-                  onValueChange={([v]) => patch({ floor: v ?? params.floor })}
-                />
-              </Field>
-              <Field label="Silhouette" value={params.softness.toFixed(2)}>
-                <Slider
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={[params.softness]}
-                  onValueChange={([v]) => patch({ softness: v ?? params.softness })}
-                />
-              </Field>
-              <Field label="Depth" value={params.depth.toFixed(2)}>
-                <Slider
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={[params.depth]}
-                  onValueChange={([v]) => patch({ depth: v ?? params.depth })}
-                />
-              </Field>
-              <div className="mt-2 grid grid-cols-2 gap-3">
-                <ToggleRow
-                  label="Straighten"
-                  checked={params.straighten}
-                  onCheckedChange={(v) => patch({ straighten: v })}
-                />
-                <ToggleRow
-                  label="Cut background"
-                  checked={params.removeBg}
-                  onCheckedChange={(v) => patch({ removeBg: v })}
-                />
-              </div>
+                <Field label="Particles" value={`${Math.round(params.particles / 1000)}k`} invert={params.invert}>
+                  <Slider
+                    min={5000}
+                    max={100000}
+                    step={1000}
+                    value={[params.particles]}
+                    onValueChange={([v]) => patch({ particles: v ?? params.particles })}
+                    invert={params.invert}
+                  />
+                </Field>
+                <Field label="Size" value={params.size.toFixed(1)} invert={params.invert}>
+                  <Slider
+                    min={0.8}
+                    max={4}
+                    step={0.1}
+                    value={[params.size]}
+                    onValueChange={([v]) => patch({ size: v ?? params.size })}
+                    invert={params.invert}
+                  />
+                </Field>
+                <Field label="Contrast" value={params.contrast.toFixed(2)} invert={params.invert}>
+                  <Slider
+                    min={0.6}
+                    max={2}
+                    step={0.05}
+                    value={[params.contrast]}
+                    onValueChange={([v]) => patch({ contrast: v ?? params.contrast })}
+                    invert={params.invert}
+                  />
+                </Field>
+                <Field label="Detail" value={params.detail.toFixed(2)} invert={params.invert}>
+                  <Slider
+                    min={0}
+                    max={2}
+                    step={0.05}
+                    value={[params.detail]}
+                    onValueChange={([v]) => patch({ detail: v ?? params.detail })}
+                    invert={params.invert}
+                  />
+                </Field>
+                <Field label="Features" value={params.feature.toFixed(2)} invert={params.invert}>
+                  <Slider
+                    min={0}
+                    max={1.5}
+                    step={0.05}
+                    value={[params.feature]}
+                    onValueChange={([v]) => patch({ feature: v ?? params.feature })}
+                    invert={params.invert}
+                  />
+                </Field>
+                <Field label="Shadow lift" value={params.floor.toFixed(2)} invert={params.invert}>
+                  <Slider
+                    min={0}
+                    max={0.3}
+                    step={0.01}
+                    value={[params.floor]}
+                    onValueChange={([v]) => patch({ floor: v ?? params.floor })}
+                    invert={params.invert}
+                  />
+                </Field>
+                <Field label="Silhouette" value={params.softness.toFixed(2)} invert={params.invert}>
+                  <Slider
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={[params.softness]}
+                    onValueChange={([v]) => patch({ softness: v ?? params.softness })}
+                    invert={params.invert}
+                  />
+                </Field>
+                <Field label="Depth" value={params.depth.toFixed(2)} invert={params.invert}>
+                  <Slider
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={[params.depth]}
+                    onValueChange={([v]) => patch({ depth: v ?? params.depth })}
+                    invert={params.invert}
+                  />
+                </Field>
+                <div className="mt-2 grid grid-cols-2 gap-3">
+                  <ToggleRow
+                    label="Straighten"
+                    checked={params.straighten}
+                    onCheckedChange={(v) => patch({ straighten: v })}
+                    invert={params.invert}
+                  />
+                  <ToggleRow
+                    label="Cut background"
+                    checked={params.removeBg}
+                    onCheckedChange={(v) => patch({ removeBg: v })}
+                    invert={params.invert}
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -696,16 +728,30 @@ function Field({
   label,
   value,
   children,
+  invert,
 }: {
   label: string;
   value: string;
   children: ReactNode;
+  invert?: boolean;
 }) {
   return (
     <label className="mb-2 block">
-      <span className="mb-1 flex items-center justify-between text-xs text-fg-muted">
+      <span
+        className={cn(
+          "mb-1 flex items-center justify-between text-xs font-medium transition-colors",
+          invert ? "text-neutral-700" : "text-fg-muted",
+        )}
+      >
         {label}
-        <span className="tabular-nums text-fg-subtle">{value}</span>
+        <span
+          className={cn(
+            "tabular-nums transition-colors",
+            invert ? "text-neutral-600 font-semibold" : "text-fg-subtle",
+          )}
+        >
+          {value}
+        </span>
       </span>
       {children}
     </label>
@@ -717,19 +763,33 @@ function ToggleRow({
   checked,
   onCheckedChange,
   icon,
+  invert,
 }: {
   label: string;
   checked: boolean;
   onCheckedChange: (v: boolean) => void;
   icon?: ReactNode;
+  invert?: boolean;
 }) {
   return (
-    <label className="flex h-11 items-center justify-between rounded-[var(--radius-md)] border border-border bg-bg px-3 text-sm">
-      <span className="flex items-center gap-1.5 text-fg-muted">
+    <label
+      className={cn(
+        "flex h-11 items-center justify-between rounded-[var(--radius-md)] border px-3 text-sm transition-colors",
+        invert
+          ? "border-neutral-300 bg-white text-neutral-900 shadow-xs"
+          : "border-border bg-bg text-fg",
+      )}
+    >
+      <span
+        className={cn(
+          "flex items-center gap-1.5 transition-colors",
+          invert ? "text-neutral-800 font-medium" : "text-fg-muted",
+        )}
+      >
         {icon}
         {label}
       </span>
-      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+      <Switch checked={checked} onCheckedChange={onCheckedChange} invert={invert} />
     </label>
   );
 }
