@@ -403,6 +403,19 @@ export class ParticleEngine {
   setRecordingAspect(aspect: number | null, width?: number, height?: number): void {
     this.recordAspect = aspect;
     if (aspect && width && height) {
+      const gl = this.gl;
+      if (gl) {
+        const maxDims = gl.getParameter(gl.MAX_VIEWPORT_DIMS) as [number, number] | null;
+        if (maxDims) {
+          const maxW = maxDims[0] || 4096;
+          const maxH = maxDims[1] || 4096;
+          if (width > maxW || height > maxH) {
+            const scale = Math.min(maxW / width, maxH / height);
+            width = Math.round(width * scale);
+            height = Math.round(height * scale);
+          }
+        }
+      }
       this.recordDims = [width, height];
     } else {
       this.recordDims = null;
@@ -526,7 +539,7 @@ export class ParticleEngine {
     const baseFov = (32 * Math.PI) / 180;
     // On tall mobile screens or 9:16 vertical recording, adapt field of view so portrait width fills the display naturally
     const fov = aspect < 1.0
-      ? 2 * Math.atan(Math.tan(baseFov / 2) * (0.80 / Math.max(0.44, aspect)))
+      ? 2 * Math.atan(Math.tan(baseFov / 2) * (0.88 / Math.max(0.45, aspect)))
       : baseFov;
     perspective(this.proj, fov, aspect, 0.1, 20);
     const idleY = this.idleOrbit && !this.userOrbit ? Math.sin(this.time * 0.18) * 0.1 : 0;

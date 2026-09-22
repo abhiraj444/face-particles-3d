@@ -23,7 +23,7 @@ function gaussianKernel(sigma: number): Float32Array {
   return k;
 }
 
-function blurChannel(src: Float32Array, w: number, h: number, sigma: number): Float32Array {
+export function blurChannel(src: Float32Array, w: number, h: number, sigma: number): Float32Array {
   const kernel = gaussianKernel(sigma);
   const radius = (kernel.length - 1) >> 1;
   const tmp = new Float32Array(w * h);
@@ -51,7 +51,7 @@ function blurChannel(src: Float32Array, w: number, h: number, sigma: number): Fl
   return out;
 }
 
-function percentileMasked(src: Float32Array, mask: Float32Array, p: number): number {
+export function percentileMasked(src: Float32Array, mask: Float32Array, p: number): number {
   const hist = new Uint32Array(256);
   let n = 0;
   for (let i = 0; i < src.length; i++) {
@@ -72,7 +72,7 @@ function percentileMasked(src: Float32Array, mask: Float32Array, p: number): num
   return 1;
 }
 
-function dilate(src: Float32Array, w: number, h: number, radius: number): Float32Array {
+export function dilate(src: Float32Array, w: number, h: number, radius: number): Float32Array {
   const out = new Float32Array(src);
   if (radius < 1) return out;
   const tmp = new Float32Array(w * h);
@@ -134,8 +134,16 @@ export function buildWeights(crop: CropResult, params: Params): WeightMaps {
     lum[i] = (0.2126 * px[p]! + 0.7152 * px[p + 1]! + 0.0722 * px[p + 2]!) / 255;
   }
 
-  const p5 = percentileMasked(lum, faceSkin, 0.05);
-  const p95 = Math.max(p5 + 0.04, percentileMasked(lum, faceSkin, 0.95));
+  let hasHairSkin = false;
+  for (let i = 0; i < hairSkin.length; i++) {
+    if (hairSkin[i]! > 0.3) {
+      hasHairSkin = true;
+      break;
+    }
+  }
+  const toneMask = hasHairSkin ? hairSkin : faceSkin;
+  const p5 = percentileMasked(lum, toneMask, 0.03);
+  const p95 = Math.max(p5 + 0.04, percentileMasked(lum, toneMask, 0.97));
   const tone = new Float32Array(w * h);
   const invRange = 1 / (p95 - p5);
   for (let i = 0; i < lum.length; i++) {
@@ -173,17 +181,20 @@ export function buildWeights(crop: CropResult, params: Params): WeightMaps {
   const maskSigma = Math.max(1.2, Math.min(w, h) * 0.02 * (0.35 + params.softness));
   const M = blurChannel(dil, w, h, maskSigma);
 
+  // Smooth skin mask to eliminate any harsh edge cutoffs at the forehead, glasses, or temples
+  const smoothSkin = blurChannel(faceSkin, w, h, Math.max(8, Math.round(w * 0.035)));
+
   const weight = new Float32Array(w * h);
   const gamma = params.contrast;
   const a = params.detail;
   const b = params.feature;
   const floor = params.floor;
-  const skinFloor = Math.max(floor, 0.22);
+  // In invert mode (white background/paper), keep skin luminous with delicate floor
+  const skinFloor = params.invert ? Math.min(floor, 0.05) : Math.max(floor, 0.20);
   for (let i = 0; i < weight.length; i++) {
     let wv = Math.pow(Math.max(tone[i]!, 1e-5), gamma) * (1 + a * edges[i]!) * (1 + b * L[i]!);
-    const isSkin = (faceSkin[i] ?? 0) > 0.2;
-    const minFloor = isSkin ? skinFloor : floor;
-    wv = Math.max(wv, minFloor * (hairSkin[i] ?? 0));
+    const effFloor = floor + (skinFloor - floor) * smoothSkin[i]!;
+    wv = Math.max(wv, effFloor * (hairSkin[i] ?? 0));
     if (params.removeBg) wv *= M[i]!;
     weight[i] = wv;
   }

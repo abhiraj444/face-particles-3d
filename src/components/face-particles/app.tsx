@@ -60,6 +60,7 @@ export function FaceParticlesApp() {
   const [visionReady, setVisionReady] = useState(false);
   const [recordDialogOpen, setRecordDialogOpen] = useState(false);
   const [printDialogOpen, setPrintDialogOpen] = useState(false);
+  const [isRecording916, setIsRecording916] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -200,6 +201,7 @@ export function FaceParticlesApp() {
   const handleStartRecord = async (options: RecordOptions) => {
     const engine = engineRef.current;
     if (!engine || recording) return;
+    if (options.aspect916) setIsRecording916(true);
     setRecording("Preparing Recording...");
     setHero(false);
     setSheet(false);
@@ -211,6 +213,7 @@ export function FaceParticlesApp() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not record.");
     } finally {
+      setIsRecording916(false);
       setRecording(null);
     }
   };
@@ -234,11 +237,18 @@ export function FaceParticlesApp() {
         params.invert ? "bg-white text-neutral-900" : "bg-bg text-fg",
       )}
     >
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-0 size-full touch-none"
-        aria-label="Particle portrait stage"
-      />
+      <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+        <canvas
+          ref={canvasRef}
+          className={cn(
+            "touch-none transition-[width,height,border-radius,box-shadow] duration-300",
+            isRecording916
+              ? "relative aspect-[9/16] h-full max-h-[100dvh] max-w-[calc(100dvh*9/16)] shadow-2xl rounded-2xl border border-white/20"
+              : "size-full",
+          )}
+          aria-label="Particle portrait stage"
+        />
+      </div>
 
       {!glOk && (
         <div className="absolute inset-0 z-30 flex items-center justify-center bg-bg px-8 text-center">
@@ -738,6 +748,7 @@ export function FaceParticlesApp() {
         open={printDialogOpen}
         onClose={() => setPrintDialogOpen(false)}
         particleSet={cacheRef.current?.set ?? engineRef.current?.getParticleSet() ?? null}
+        pipelineCache={cacheRef.current}
         currentYaw={engineRef.current?.getOrbit().yaw ?? 0}
         currentPitch={engineRef.current?.getOrbit().pitch ?? 0.04}
         invert={params.invert}

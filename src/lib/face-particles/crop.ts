@@ -32,8 +32,12 @@ function headBounds(vision: VisionResult, srcW: number, srcH: number, chinLimitY
     for (let y = 0; y < classH; y++) {
       for (let x = 0; x < classW; x++) {
         const c = classes[y * classW + x] ?? 0;
-        // Include hair, face, and accessories/glasses (class 5)
-        const isHeadElement = c === CLASS_HAIR || c === CLASS_FACE || c === CLASS_OTHERS;
+        // Include hair, face, accessories/glasses (class 5), and headwear/hat (class 4 above chin)
+        const isHeadElement =
+          c === CLASS_HAIR ||
+          c === CLASS_FACE ||
+          c === CLASS_OTHERS ||
+          (c === CLASS_CLOTHES && y <= maxNeckY * 0.75);
         const isNeckSlice = c === CLASS_BODY && y <= maxNeckY;
         if (isHeadElement || isNeckSlice) {
           const px = (x / classW) * srcW;
@@ -177,10 +181,11 @@ export function headCrop(
         const isFace = c === CLASS_FACE;
         const isBody = c === CLASS_BODY;
         const isOthers = c === CLASS_OTHERS; // Glasses and accessories!
+        const isHat = c === CLASS_CLOTHES && ly < 0; // Caps / hats above face center
         const neck = isBody && y > chinCropY - 8 && y < chinCropY + outH * 0.16;
-        hairSkin[i] = isHair || isFace || isOthers || neck ? 1 : 0;
+        hairSkin[i] = isHair || isFace || isOthers || isHat || neck ? 1 : 0;
         faceSkin[i] = isFace || isOthers ? 1 : 0;
-        mask[i] = isHair || isFace || isOthers ? 1 : neck ? clamp(1 - (y - chinCropY) / (outH * 0.14), 0, 1) : 0;
+        mask[i] = isHair || isFace || isOthers || isHat ? 1 : neck ? clamp(1 - (y - chinCropY) / (outH * 0.14), 0, 1) : 0;
       }
     }
   } else {
