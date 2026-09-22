@@ -81,6 +81,8 @@ export class ParticleEngine {
   private time = 0;
   private frameTimes: number[] = [];
   private renderScale = 1;
+  private recordAspect: number | null = null;
+  private recordDims: [number, number] | null = null;
 
   yaw = 0;
   pitch = 0.04;
@@ -398,6 +400,24 @@ export class ParticleEngine {
     this.idleOrbit = !lock;
   }
 
+  setRecordingAspect(aspect: number | null, width?: number, height?: number): void {
+    this.recordAspect = aspect;
+    if (aspect && width && height) {
+      this.recordDims = [width, height];
+    } else {
+      this.recordDims = null;
+    }
+    this.resize();
+  }
+
+  getParticleSet(): ParticleSet | null {
+    return this.set;
+  }
+
+  getOrbit(): { yaw: number; pitch: number } {
+    return { yaw: this.yaw, pitch: this.pitch };
+  }
+
   private setState(s: AnimState): void {
     if (this.state === s) return;
     this.state = s;
@@ -481,6 +501,15 @@ export class ParticleEngine {
     const canvas = this.canvas;
     const gl = this.gl;
     if (!gl) return;
+    if (this.recordDims) {
+      const [w, h] = this.recordDims;
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+      gl.viewport(0, 0, w, h);
+      return;
+    }
     const dpr = Math.min(2.5, typeof window !== "undefined" ? (window.devicePixelRatio || 1) : 1);
     const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
     const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
@@ -493,9 +522,9 @@ export class ParticleEngine {
 
   private camera(): void {
     const gl = this.gl!;
-    const aspect = gl.drawingBufferWidth / Math.max(1, gl.drawingBufferHeight);
+    const aspect = this.recordAspect ?? (gl.drawingBufferWidth / Math.max(1, gl.drawingBufferHeight));
     const baseFov = (32 * Math.PI) / 180;
-    // On tall mobile screens (aspect < 1.0), adapt field of view so portrait width fills the display naturally without moving camera away
+    // On tall mobile screens or 9:16 vertical recording, adapt field of view so portrait width fills the display naturally
     const fov = aspect < 1.0
       ? 2 * Math.atan(Math.tan(baseFov / 2) * (0.80 / Math.max(0.44, aspect)))
       : baseFov;

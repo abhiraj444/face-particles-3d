@@ -31,8 +31,10 @@ import {
 } from "@/lib/face-particles/pipeline";
 import { paintStudy } from "@/lib/face-particles/procedural";
 import { applyDepthScale, makeCloud } from "@/lib/face-particles/sampler";
-import { downloadBlob, recordTimeline } from "@/lib/face-particles/record";
+import { downloadBlob, recordTimeline, type RecordOptions } from "@/lib/face-particles/record";
 import { preloadVision } from "@/lib/face-particles/vision";
+import { RecordDialog } from "@/components/face-particles/record-dialog";
+import { PrintDialog } from "@/components/face-particles/print-dialog";
 import type { AnimState, EffectName, Params } from "@/lib/face-particles/types";
 
 type Busy = { stage: string; fraction: number } | null;
@@ -46,7 +48,7 @@ export function FaceParticlesApp() {
   const paramsRef = useRef<Params>(loadParams());
   const rebuildTimer = useRef<number>(0);
 
-  const [params, setParams] = useState<Params>(paramsRef.current);
+  const [params, setParams] = useState<Params>(() => paramsRef.current);
   const [hero, setHero] = useState(true);
   const [sheet, setSheet] = useState(false);
   const [busy, setBusy] = useState<Busy>(null);
@@ -56,6 +58,8 @@ export function FaceParticlesApp() {
   const [recording, setRecording] = useState<string | null>(null);
   const [hasPortrait, setHasPortrait] = useState(false);
   const [visionReady, setVisionReady] = useState(false);
+  const [recordDialogOpen, setRecordDialogOpen] = useState(false);
+  const [printDialogOpen, setPrintDialogOpen] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -193,16 +197,17 @@ export function FaceParticlesApp() {
 
   const play = (name: EffectName) => engineRef.current?.play(name);
 
-  const onRecord = async () => {
+  const handleStartRecord = async (options: RecordOptions) => {
     const engine = engineRef.current;
     if (!engine || recording) return;
-    setRecording("Starting 30s Recording");
+    setRecording("Preparing Recording...");
     setHero(false);
     setSheet(false);
     try {
-      const blob = await recordTimeline(engine, 30, (label) => setRecording(label));
+      const blob = await recordTimeline(engine, options, (label) => setRecording(label));
       const ext = blob.type.includes("mp4") ? "mp4" : "webm";
-      downloadBlob(blob, `face-particles-30s.${ext}`);
+      const suffix = options.aspect916 ? "-9x16" : "";
+      downloadBlob(blob, `face-particles${suffix}.${ext}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not record.");
     } finally {
@@ -328,10 +333,10 @@ export function FaceParticlesApp() {
           <Button
             variant="secondary"
             size="icon"
-            aria-label="Print portrait"
-            title="Print particle portrait on paper"
+            aria-label="A4 Print & Vector Studio"
+            title="Open A4 Print & Vector Studio"
             disabled={!hasPortrait}
-            onClick={() => window.print()}
+            onClick={() => setPrintDialogOpen(true)}
             className={
               params.invert
                 ? "border-neutral-300 bg-white/85 text-neutral-900 shadow-sm hover:bg-white backdrop-blur-md"
@@ -343,9 +348,10 @@ export function FaceParticlesApp() {
           <Button
             variant="primary"
             size="icon"
-            aria-label="Record 30s video"
+            aria-label="Record Video (9:16 Status / Reels)"
+            title="Record Video (9:16 Status / Reels)"
             disabled={!hasPortrait || Boolean(recording)}
-            onClick={() => void onRecord()}
+            onClick={() => setRecordDialogOpen(true)}
             className={
               params.invert ? "bg-neutral-900 text-white hover:bg-neutral-800 shadow-sm" : ""
             }
@@ -719,6 +725,22 @@ export function FaceParticlesApp() {
         capture="user"
         className="hidden"
         onChange={(e) => onFile(e.target.files?.[0])}
+      />
+
+      <RecordDialog
+        open={recordDialogOpen}
+        onClose={() => setRecordDialogOpen(false)}
+        onStart={handleStartRecord}
+        invert={params.invert}
+      />
+
+      <PrintDialog
+        open={printDialogOpen}
+        onClose={() => setPrintDialogOpen(false)}
+        particleSet={cacheRef.current?.set ?? engineRef.current?.getParticleSet() ?? null}
+        currentYaw={engineRef.current?.getOrbit().yaw ?? 0}
+        currentPitch={engineRef.current?.getOrbit().pitch ?? 0.04}
+        invert={params.invert}
       />
     </main>
   );
